@@ -3,6 +3,7 @@ import pandas as pd
 from sqlalchemy import create_engine, Table, Column, Integer, String, MetaData, Float
 from pymongo import MongoClient
 import datetime
+import os
 
 # Database configuration - Replace with actual credentials
 MYSQL_USER = "root"
@@ -21,7 +22,7 @@ COLLECTION_NAME='sales'
 # Connect to MySQL
 def connect_mysql():
     try:
-        st = f"mysql+mysqlconnector://{MYSQL_USER}:{mysql_password_encoded}@{MYSQL_HOST}:{MYSQL_PORT}/{MYSQL_DATABASE}"
+        #st = f"mysql+mysqlconnector://{MYSQL_USER}:{mysql_password_encoded}@{MYSQL_HOST}:{MYSQL_PORT}/{MYSQL_DATABASE}"
         # print(st)
         engine = create_engine(f"mysql+mysqlconnector://{MYSQL_USER}:{mysql_password_encoded}@{MYSQL_HOST}:{MYSQL_PORT}/{MYSQL_DATABASE}")
         print("Connected to MySQL")
@@ -42,31 +43,19 @@ def connect_mongo():
         return None
     
 
-def import_data_to_mysql(engine, excel_file):
-    # df = pd.read_csv(csv_file, encoding='ISO-8859-1')
-    # df = pd.read_csv(csv_file, encoding='ISO-8859-1', low_memory=False, on_bad_lines='skip')
-    df = pd.read_excel(excel_file, engine='openpyxl')
+def insert_data_to_mysql(engine, df, table_name=None):
 
-    print(df.head())
-    metadata = MetaData()
-    # coffee_sales_table = Table('coffee_sales', metadata,
-    #                            Column('id', Integer, primary_key=True, autoincrement=True),
-    #                            Column('product', String(50)),
-    #                            Column('quantity', Integer),
-    #                            Column('price', Float),
-    #                            Column('date', String(20))
-    #                            )
+    try:
+        table_name = table_name or "temp"
+        # print(df.head())
+        df.to_sql(name=table_name, con=engine, if_exists='replace', index=False)
+        print(f"Data inserted into MySQL table '{table_name}'")
+        return {"message": f"Data inserted into SQL table '{table_name}' successfully"}
     
-    # # Create table in MySQL
-    # metadata.create_all(engine)
-     # Insert data into MySQL table, replacing existing data
-    df.to_sql(name="coffee_sales_table", con=engine, if_exists='replace', index=False)
+    except Exception as e:
+        print(f"Error inserting data into MySQL: {e}")
+        return {"error": str(e)}
 
-    print("Table created in MySQL")
-
-    # Insert data
-    df.to_sql('coffee_sales', con=engine, if_exists='replace', index=False)
-    print("Data imported into MySQL")
 
 #function coz mongodb does not support given date format
 def convert_time_columns(df):
@@ -81,30 +70,46 @@ def convert_time_columns(df):
             )
     return df
 
-def import_data_to_mongo(db, excel_file):
+def insert_data_to_mongo(db, df, collection_name=None):
+    try:
+        collection_name = collection_name or COLLECTION_NAME
+        df = convert_time_columns(df)
+        # print(df.head())
+        data = df.to_dict(orient='records')
+        data = [{str(k): v for k, v in record.items()} for record in data]
 
-    df = pd.read_excel(excel_file, engine='openpyxl')
-    print(df.head())
-    df = convert_time_columns(df)
+        collection = db[collection_name]
+        collection.insert_many(data)
+        print(f"Inserted {len(data)} records into {COLLECTION_NAME} collection.")
+        return {"message": f"Data inserted into MongoDB collection '{collection_name}' successfully"}
+    except Exception as e:
+        print(f"Error inserting data into MongoDB: {e}")
+        return {"error": str(e)}
 
-    data = df.to_dict(orient='records')
 
-    collection = db[COLLECTION_NAME]
-    collection.insert_many(data)
-    print(f"Inserted {len(data)} records into {COLLECTION_NAME} collection.")
+# General import function to load data from a file and insert into both databases
+def import_data(df, to_sql=True, to_nosql=True,table_name=None):
+    # print("HERE2")
+    results = {}
+    if to_sql:
+        engine = connect_mysql()
+        if engine:
+            results['sql'] = insert_data_to_mysql(engine, df, table_name)
+    
+    if to_nosql:
+        db = connect_mongo()
+        if db is not None:
+            print(db)
+            results['nosql'] = insert_data_to_mongo(db, df, table_name)
+
+    return results
+
 
 
 def main():
-    mysql_engine = connect_mysql()
-    mongo_db = connect_mongo()
-
-    csv_file = 'coffee.xlsx'
-
-    if mysql_engine:
-        import_data_to_mysql(mysql_engine, csv_file)
-
-    if mongo_db is not None:
-        import_data_to_mongo(mongo_db, csv_file)
+    file_path = 'coffee.xlsx'
+    results = import_data(file_path, to_sql=True, to_nosql=True)
+    print("Import results:", results)
 
 if __name__ == "__main__":
     main()
