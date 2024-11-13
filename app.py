@@ -3,10 +3,13 @@
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 import pandas as pd
-from DatabaseSetup import connect_mysql, connect_mongo, insert_data_to_mysql, insert_data_to_mongo, import_data
+import random
+from DatabaseSetup import connect_mysql, connect_mongo, import_data, get_mongo_collection_names, get_mysql_table_names, generate_example_queries
 
 app = Flask(__name__)
 CORS(app)
+
+
 
 # API endpoint to insert data into either SQL or MongoDB
 @app.route("/api/insert", methods=["POST"])
@@ -44,6 +47,36 @@ def insert_data():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+# API endpoint to generate example queries based on user input
+@app.route("/api/generate_query", methods=["POST"])
+def generate_query():
+    try:
+        data = request.get_json()
+        table_name = data.get("table_name")
+        user_input = data.get("user_input")
+        db_type = data.get("db_type", "mysql").lower() #defaulting to mysql if no dbtype given by user
+        print(table_name, user_input, db_type)
+        if not table_name:
+            if db_type == "mysql":
+                engine = connect_mysql()
+                table_names = get_mysql_table_names(engine)
+                table_name = random.choice(table_names) #randomly generating table name
+
+            elif db_type == "nosql":
+                db = connect_mongo()
+                print("GRFK")
+                collection_names = get_mongo_collection_names(db)
+                print(collection_names)
+                table_name = random.choice(collection_names)  # Select a random collection
+        if not user_input:
+            return jsonify({"error": "User input for query example is required"}), 400
+        
+        queries = generate_example_queries(table_name, user_input, db_type)
+
+        return jsonify({"queries": queries}), 200
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 # API endpoint for SQL data retrieval
@@ -54,7 +87,7 @@ def get_sql_coffee_sales():
         return jsonify({"error": "table_name parameter is required"}), 400
     try:
         engine = connect_mysql()
-        query = f"SELECT * FROM {table_name} limit 10"
+        query = f"SELECT * FROM {table_name} limit 20"
         df = pd.read_sql(query, engine)
 
         # Convert Timedelta columns to string format
