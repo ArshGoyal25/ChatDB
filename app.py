@@ -12,8 +12,14 @@ CORS(app)
 
 
 # API endpoint to insert data into either SQL or MongoDB
-@app.route("/api/insert", methods=["POST"])
+@app.route("/api/insert", methods=["POST", "OPTIONS"])
 def insert_data():
+    if request.method == 'OPTIONS':
+        # Handle preflight request
+        return '', 200  # No content but successful status
+    print(request)
+    print(request.files)
+    print(request.form)
 
     if 'file' not in request.files or 'target_db' not in request.form:
         return jsonify({"error": "CSV file and database type are required"}), 400
@@ -25,7 +31,11 @@ def insert_data():
         table_name=request.form.get('table_name')
 
         if table_name is None:
-            file_name = file.filename[0: len(file.filename)-4]
+            print(file.filename[len(file.filename)-4: len(file.filename)])
+            if file.filename[len(file.filename)-4: len(file.filename)]=="xlsx":
+                file_name = file.filename[0: len(file.filename)-5]
+            else:
+                file_name = file.filename[0: len(file.filename)-4]
             table_name = file_name.replace(" ", "_")
             print(table_name)
 
