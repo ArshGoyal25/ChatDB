@@ -5,6 +5,9 @@ from flask_cors import CORS
 import pandas as pd
 import random
 from DatabaseSetup import connect_mysql, connect_mongo, import_data, get_mongo_collection_names, get_mysql_table_names, generate_example_queries
+import re
+import ast
+from bson import ObjectId
 
 app = Flask(__name__)
 CORS(app)
@@ -97,7 +100,7 @@ def get_sql_coffee_sales():
         return jsonify({"error": "table_name parameter is required"}), 400
     try:
         engine = connect_mysql()
-        query = f"SELECT * FROM {table_name} limit 20"
+        query = f"SELECT * FROM {table_name} limit 5"
         df = pd.read_sql(query, engine)
 
         # Convert Timedelta columns to string format
@@ -120,7 +123,7 @@ def get_mongo_coffee_sales():
     try:
         db = connect_mongo()  # Correct usage here
         collection = db[collection_name]
-        data = list(collection.find({}, {"_id": 0}).limit(20)) # Exclude '_id' field
+        data = list(collection.find({}, {"_id": 0}).limit(5)) # Exclude '_id' field
         return jsonify(data), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -144,6 +147,93 @@ def filter_sql_coffee_sales():
         return jsonify(data), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+def parse_query(query):
+    collection_match = re.search(r"db\.(\w+)", query)
+    if not collection_match:
+        raise ValueError("Collection name not found in query")
+    collection_name = collection_match.group(1)
+
+    # Extract query type (find, aggregate, etc.)
+    if '.find(' in query:
+        query_type = 'find'
+    elif '.aggregate(' in query:
+        query_type = 'aggregate'
+    else:
+        query_type = 'unknown'
+
+    return collection_name, query_type
+
+#Convert MongoDB ObjectId to strings for JSON serialization
+def serialize_mongo_docs(docs):
+    for doc in docs:
+        if "_id" in doc and isinstance(doc["_id"], ObjectId):
+            doc["_id"] = str(doc["_id"])
+    return docs
+
+
+# API endpoint to execute a query on the appropriate database
+@app.route("/api/execute_query", methods=["POST"])
+def execute_query():
+    try:
+        # Parse the incoming request
+        data = request.get_json()
+        query = data.get("query")
+        db_type = data.get("db_type", "").lower()
+
+        if not query or not db_type:
+            return jsonify({"error": "Both 'query' and 'db_type' are required"}), 400
+
+        # Handle SQL queries
+        if db_type == "mysql":
+            try:
+                engine = connect_mysql()
+                df = pd.read_sql(query, engine)
+
+                # Convert Timedelta columns to string format if any
+                for col in df.select_dtypes(include=['timedelta']):
+                    df[col] = df[col].apply(
+                        lambda x: str(x).split(" ")[-1] if pd.notnull(x) else None
+                    )
+
+
+                data = df.to_dict(orient="records")
+                return jsonify(data), 200
+
+            except Exception as e:
+                return jsonify({"error": f"SQL execution error: {str(e)}"}), 500
+
+        # Handle NoSQL queries (MongoDB)
+        elif db_type == "nosql":
+            try:
+                db = connect_mongo()
+                collection_str, query_type = parse_query(query)
+
+                collection = db[collection_str]
+                if query_type == "find":
+                    results = list(eval(query))
+                    serialized_results = serialize_mongo_docs(results)
+                    return jsonify(serialized_results), 200
+
+                elif query_type == "aggregate":
+                    query_str = query.split('aggregate(')[-1].split('])')[0] + "]"
+                    aggregation_query = ast.literal_eval(query_str)
+                    results = list(collection.aggregate(aggregation_query))
+                    serialized_results = serialize_mongo_docs(results)
+                    return jsonify(serialized_results), 200
+
+                else:
+                    return jsonify({"error": f"NoSQL execution error"}), 500
+
+            except Exception as e:
+                return jsonify({"error": f"NoSQL execution error: {str(e)}"}), 500
+
+        else:
+            return jsonify({"error": f"Unsupported database type: {db_type}"}), 400
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 
 if __name__ == "__main__":
     app.run(debug=True)

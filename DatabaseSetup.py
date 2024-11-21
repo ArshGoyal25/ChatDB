@@ -119,7 +119,7 @@ def get_random_column(columns):
     return random.choice(columns)
 
 def generate_select_query(table_name, columns):
-    return f"SELECT * FROM {table_name} LIMIT 20"
+    return f"SELECT * FROM {table_name} LIMIT 5"
 
 
 def generate_group_by_query(db_type, table_name, columns, fields):
@@ -178,42 +178,42 @@ def generate_example_queries(table_name, user_input, db_type = 'mysql'):
             
             # Build MongoDB aggregation query based on the selected aggregation function
             if aggregation_function == "AVG":
-                query = f"db.{table_name}.aggregate([{{ $group: {{ _id: '${group_by_column}', avg: {{ $avg: '${aggregation_field}' }} }} }}])"
+                query = f"db.{table_name}.aggregate([{{ '$group': {{ '_id': '${group_by_column}', 'avg': {{ '$avg': '${aggregation_field}' }} }} }}])"
             elif aggregation_function == "SUM":
-                query = f"db.{table_name}.aggregate([{{ $group: {{ _id: '${group_by_column}', sum: {{ $sum: '${aggregation_field}' }} }} }}])"
+                query = f"db.{table_name}.aggregate([{{ '$group': {{ '_id': '${group_by_column}', 'sum': {{ '$sum': '${aggregation_field}' }} }} }}])"
             elif aggregation_function == "COUNT":
-                query = f"db.{table_name}.aggregate([{{ $group: {{ _id: '${group_by_column}', count: {{ $sum: 1 }} }} }}])"
+                query = f"db.{table_name}.aggregate([{{ '$group': {{ '_id': '${group_by_column}', 'count': {{ '$sum': 1 }} }} }}])"
             elif aggregation_function == "MAX":
-                query = f"db.{table_name}.aggregate([{{ $group: {{ _id: '${group_by_column}', max: {{ $max: '${aggregation_field}' }} }} }}])"
+                query = f"db.{table_name}.aggregate([{{ '$group': {{ '_id': '${group_by_column}', 'max': {{ '$max': '${aggregation_field}' }} }} }}])"
             elif aggregation_function == "MIN":
-                query = f"db.{table_name}.aggregate([{{ $group: {{ _id: '${group_by_column}', min: {{ $min: '${aggregation_field}' }} }} }}])"
+                query = f"db.{table_name}.aggregate([{{ '$group': {{ '_id': '${group_by_column}', 'min': {{ '$min': '${aggregation_field}' }} }} }}])"
             queries.append(query)
 
     elif "select" in user_input.lower():
         # SELECT query with specific columns
         if db_type == 'mysql':
-            query = f"SELECT {', '.join(random.sample(columns, 2))} FROM {table_name} LIMIT 20"
+            query = f"SELECT {', '.join(random.sample(columns, 2))} FROM {table_name} LIMIT 5"
             queries.append(query)
         elif db_type == 'nosql':
             random_fields = random.sample(fields, 2)  # Select two random fields
             projection = {field: 1 for field in random_fields}
-            query = f"db.{table_name}.find().project({projection}).limit(20)"
+            query = f"db.{table_name}.find().project({projection}).limit(5)"
             queries.append(query)
             print("HETERTERTE")
 
     if not queries:
         if db_type == 'mysql':
-            query1 = f"SELECT * FROM {table_name} LIMIT 20"
-            query2= f"SELECT {', '.join(random.sample(columns, 2))} FROM {table_name} LIMIT 20"
+            query1 = f"SELECT * FROM {table_name} LIMIT 5"
+            query2= f"SELECT {', '.join(random.sample(columns, 2))} FROM {table_name} LIMIT 5"
             query3 = f"SELECT *, {random.choice(aggregation_functions)}({random.choice(columns)}) FROM {table_name} GROUP BY {random.choice(columns)}"
             queries = [query1, query2, query3]
         
         elif db_type=='nosql':
             random_fields = random.sample(fields, 2)  # Select two random fields
             projection = {field: 1 for field in random_fields}
-            query1 = f"db.{table_name}.find().limit(20)"
-            query2 = f"db.{table_name}.find().project({projection}).limit(20)"
-            query3 = f"db.{table_name}.aggregate([{{ $group: {{ _id: '$category', avg: {{ $avg: '$price' }} }} }}])" # HAVE TO DYNAMICALLY GENERATE AGGREGATION FUNC TOO!
+            query1 = f"db.{table_name}.find().limit(5)"
+            query2 = f"db.{table_name}.find().project({projection}).limit(5)"
+            query3 = f"db.{table_name}.aggregate([{{ '$group': {{ '_id': '$category', 'avg': {{ '$avg': '$price' }} }} }}])" # HAVE TO DYNAMICALLY GENERATE AGGREGATION FUNC TOO!
             queries = [query1, query2, query3]
     return queries
 
@@ -237,8 +237,9 @@ def import_data(df, to_sql=True, to_nosql=True,table_name=None):
 
 
 def main():
-    file_path = 'coffee.xlsx'
-    results = import_data(file_path, to_sql=True, to_nosql=True)
+    file_path = 'coffee_shop.xlsx'
+    df = pd.read_excel(file_path)
+    results = import_data(df, to_sql=True, to_nosql=True)
     print("Import results:", results)
 
 if __name__ == "__main__":
