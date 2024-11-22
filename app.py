@@ -168,7 +168,6 @@ def get_table_columns(engine, table_name):
 
 
 def detect_natural_language_query(user_input):
-    # Patterns for aggregate queries (with GROUP BY)
     patterns = [
         r"total (?P<A>\w+) by (?P<B>\w+)",
         r"find (?P<A>\w+) grouped by (?P<B>\w+)",
@@ -178,7 +177,6 @@ def detect_natural_language_query(user_input):
         r"maximum (?P<A>\w+) by (?P<B>\w+)"
     ]
     
-    # Pattern for simple queries with WHERE clause
     where_pattern = r"where (?P<condition>.+)"
     
     # Check for aggregate queries
@@ -210,7 +208,7 @@ def handle_natural_language_query(db_type, table_name, user_input):
     if db_type == 'mysql':
         return handle_mysql_query(table_name, matched_query, condition, query_type, user_input)
     elif db_type == 'mongodb':
-        return handle_mongodb_query(table_name, matched_query, condition, query_type)
+        return handle_mongodb_query(table_name, matched_query, condition, query_type, user_input)
     else:
         return jsonify({"error": f"Unsupported database type: {db_type}"}), 400
 
@@ -248,13 +246,11 @@ def handle_mysql_query(table_name, matched_query, condition, query_type, user_in
         
         query = f"SELECT {matched_query['B']}, {aggregate_function}({matched_query['A']}) AS {matched_query['B']}_{matched_query['A']} FROM {table_name} {where_clause} GROUP BY {matched_query['B']} ORDER BY {matched_query['B']}_{matched_query['A']} DESC"
     else:
-        # Simple SELECT query with WHERE clause
         query = f"SELECT {matched_query['A']} FROM {table_name} {where_clause}"
 
     return jsonify({"queries": [query]}), 200
 
-def handle_mongodb_query(table_name, matched_query, condition, query_type):
-    # MongoDB-specific code
+def handle_mongodb_query(table_name, matched_query, condition, query_type, user_input):
     engine = connect_mongo()
     table_columns = get_mongo_collection_columns(engine, table_name)
     
@@ -270,7 +266,19 @@ def handle_mongodb_query(table_name, matched_query, condition, query_type):
         pipeline.append({"$match": condition_dict})
 
     if query_type == "aggregate":
-        # Aggregate query (with GROUP BY)
+        aggregate_methods = {
+            "total": "SUM",
+            "highest": "MAX",
+            "average": "AVG",
+            "minimum": "MIN",
+            "maximum": "MAX"
+        }
+        aggregate_function = None
+        for key, func in aggregate_methods.items():
+            if key in user_input.lower():
+                aggregate_function = func
+                break
+
         group_stage = {
             "$group": {
                 "_id": f"${matched_query['B']}",
@@ -278,13 +286,12 @@ def handle_mongodb_query(table_name, matched_query, condition, query_type):
             }
         }
         sort_stage = {
-            "$sort": {f"{matched_query['B']}_{matched_query['A']}": -1}  # descending order
+            "$sort": {f"{matched_query['B']}_{matched_query['A']}": -1}
         }
         
         pipeline.append(group_stage)
         pipeline.append(sort_stage)
     else:
-        # Simple SELECT query with WHERE clause
         pipeline.append({"$project": {matched_query['A']: 1}})
 
     return jsonify({"queries": pipeline}), 200
@@ -303,19 +310,16 @@ def parse_condition(condition, valid_columns):
         "is greater than or equal to": ">="
     }
 
-    # Replace "is less than" with "<", etc.
     for phrase, operator in operators.items():
         if phrase in condition:
             condition = condition.replace(phrase, operator)
 
-    # Now check for the operator
     for operator in operators.values():
         if operator in condition:
             left, right = condition.split(operator)
             left = left.strip()
             right = right.strip()
             if left in valid_columns:
-                # Handling string values by stripping quotes (e.g., "New York" -> New York)
                 if right.startswith('"') and right.endswith('"'):
                     right = right[1:-1]
                 condition_dict[left] = format_value(right, operator)
@@ -339,16 +343,13 @@ def format_value(value, operator):
 
 
 def get_mongo_collection_columns(db, table_name):
-    # Get column names (keys) from the first document in the specified collection
     collection = db[table_name]
     
-    # Fetch the first document from the collection
     first_document = collection.find_one()
     
     if not first_document:
-        return []  # If no documents are found, return an empty list
+        return [] 
     
-    # Return the list of keys (column names) from the first document
     return list(first_document.keys())
 
 
