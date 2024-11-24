@@ -219,7 +219,6 @@ def execute_query():
             try:
                 engine = connect_mysql()
                 df = pd.read_sql(query, engine)
-                print(df)
                 # Convert Timedelta columns to string format if any
                 for col in df.select_dtypes(include=['timedelta']):
                     df[col] = df[col].apply(

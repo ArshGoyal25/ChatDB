@@ -1,13 +1,14 @@
 # database_setup.py
 import pandas as pd
-from sqlalchemy import create_engine, Table, Column, Integer, String, MetaData, Float
+from sqlalchemy import create_engine, Table, Column, Integer, String, MetaData, Float, text
 from pymongo import MongoClient
 import datetime
 import random
+import ast
 
 # Database configuration - Replace with actual credentials
 MYSQL_USER = "root"
-MYSQL_PASSWORD = ""
+MYSQL_PASSWORD = "root@111"
 mysql_password_encoded = MYSQL_PASSWORD.replace('@', '%40')
 MYSQL_HOST = "localhost"
 MYSQL_PORT = 3306
@@ -122,108 +123,298 @@ def get_random_column(columns):
     """Select a random column from a list of columns."""
     return random.choice(columns)
 
-def generate_select_query(table_name, columns):
-    return f"SELECT * FROM {table_name} LIMIT 5"
+def get_random_operation(db_type):
+    if db_type == "mysql":
+        operators = ["=", "<", ">", "!=", ">=", "<="]
+    elif db_type == "nosql":
+        operators = ["$eq", "$lt", "$gt", "$ne", "$gte", "$lte"]
+    return random.choice(operators)
 
 
-def generate_group_by_query(db_type, table_name, columns, fields):
-    """Generate a GROUP BY query with dynamic aggregation."""
-    aggregation_function = get_random_aggregation_function()
+# Retrieve columns and their types from MySQL
+def get_columns_and_types_from_mysql(engine, table_name):
+    # Get a connection object from the engine
+    with engine.connect() as connection:
+        query = text(f"DESCRIBE {table_name}")
+        result = connection.execute(query)
+        columns = {}
+        for row in result:
+            columns[row[0]] = row[1]
+    return columns
+
+# Retrieve field types from a sample document in MongoDB
+def get_field_types_from_mongodb(db, table_name):
+    sample_document = db[table_name].find_one()
+    if not sample_document:
+        return {}
+    return {key: type(value).__name__ for key, value in sample_document.items()}
+
+def get_numeric_cols_sql(columns):
+    numeric_columns = [
+    col for col, col_type in columns.items()
+    if any(keyword in col_type.lower() for keyword in ['int', 'float', 'double', 'decimal'])
+    ]
+    return numeric_columns
+
+def get_numeric_fields_nosql(fields):
+    numeric_types = ['int', 'long', 'double', 'decimal128']
+    numeric_fields = [field for field, field_type in fields.items() if any(num_type in field_type for num_type in numeric_types)]
+    return numeric_fields
+
+
+def get_sample_row_mysql(engine, table_name):
+    query = text(f"SELECT * FROM {table_name} ORDER BY RAND() LIMIT 1")
+    df = pd.read_sql(query, engine)
+    for col in df.select_dtypes(include=['timedelta']):
+                    df[col] = df[col].apply(
+                        lambda x: str(x).split(" ")[-1] if pd.notnull(x) else None
+                    )
+
+    data = df.to_dict(orient="records")
+    return data
+
+def get_sample_document_mongodb(db, table_name):
+    sample_document = db[table_name].aggregate([{'$sample': {'size': 1}}]).next()
+    if sample_document:
+        return sample_document
+    return {}
+
+def generate_sql_select(columns):
+    project_columns = random.sample(list(columns.keys()),k=2)  # Select 2 random columns
+    return project_columns
+
+def generate_sql_where_clause(columns, sample_row):
+    project_columns = random.sample(list(columns.keys()),k=2)  # Select 2 random columns
+
+    column = random.choice(list(columns.keys()))
+    numeric_columns = get_numeric_cols_sql(columns)        
+    value = sample_row[0][column]
+
+    if column in numeric_columns:
+        operator = get_random_operation("mysql")
+    else:
+        operator = random.choice(["=", "!="])
+        value = f"'{value}'"  # Wrap non numeric values in quotes
+
+    where_clause = f"{column} {operator} {value}"
+    return where_clause, project_columns
+
+def generate_sql_group_by(columns):
+    numeric_columns = get_numeric_cols_sql(columns)
+    if not numeric_columns:
+        return None
+    agg_func = get_random_aggregation_function()
+    agg_column = random.choice(numeric_columns)
+    group_column = random.choice(list(columns.keys()))
+
+    project_cols = [group_column, f"{agg_func}({agg_column})"]
+
+    return agg_func, agg_column, group_column, project_cols
+
+def generate_sql_having(columns):
+    agg_func, agg_column, group_column, project_columns = generate_sql_group_by(columns)
+    having_op = get_random_operation("mysql")
+    return agg_func, agg_column, having_op, group_column, project_columns
+
+def generate_sql_order_by(columns):
+    orderby_column = random.choice(columns)
+    order_direction = random.choice(["ASC", "DESC"])
+    return orderby_column, order_direction
+
+def generate_sql_aggregate(columns):
+    numeric_columns = get_numeric_cols_sql(columns)
+    if not numeric_columns:
+        return None
+    agg_func = get_random_aggregation_function()
+    agg_column = random.choice(numeric_columns)
+
+    project_cols = [f"{agg_func}({agg_column})"]
+    return project_cols
+
+def sql_generate_example_queries(table_name, columns, sample_row, user_input):
+    query = ""
+    project_columns = where_clause = agg_func = agg_column = group_column = orderby_column = order_direction = having_op = None
+    if "select" in user_input.lower():
+        project_columns = generate_sql_select(columns)
+    if "where" in user_input.lower():
+        where_clause, project_columns = generate_sql_where_clause(columns, sample_row)
+    if "aggregate" in user_input.lower():
+        project_columns = generate_sql_aggregate(columns)
+    if "group by" in user_input.lower():
+        agg_func, agg_column, group_column, project_columns = generate_sql_group_by(columns)
+    if "having" in user_input.lower():
+        agg_func, agg_column, having_op, group_column, project_columns = generate_sql_having(columns)
+    if "order by" in user_input.lower():
+        if "group by" in user_input.lower() or "having" in user_input.lower():
+            orderby_column, order_direction = generate_sql_order_by(project_columns)
+        else:
+            orderby_column, order_direction = generate_sql_order_by(list(columns.keys()))
+            project_columns = random.sample(list(columns.keys()),k=2)
+
+    if project_columns is not None:
+        query += f"SELECT {', '.join(project_columns)} FROM {table_name}"
+    if where_clause is not None:
+        query += f" WHERE {where_clause}"
+    if group_column is not None:
+        query += f" GROUP BY {group_column}"
+    if having_op is not None:
+        query += f" HAVING {agg_func}({agg_column}) {having_op} {random.randint(1, 10)}"
+    if orderby_column is not None:
+        query += f" ORDER BY {orderby_column} {order_direction}"
     
-    # For MySQL
-    if db_type == 'mysql':
-        column_for_aggregation = get_random_column(columns)
-        group_by_column = get_random_column(columns)
-        return f"SELECT {group_by_column}, {aggregation_function}({column_for_aggregation}) FROM {table_name} GROUP BY {group_by_column}"
+    if group_column is None and having_op is None and "aggregate" not in user_input.lower() and project_columns is not None:
+        query += f" LIMIT 5"
+
+    if query == "":
+        return None
     
-    # For MongoDB
-    elif db_type == 'nosql':
-        group_by_column = get_random_column(fields)
-        aggregation_field = get_random_column(fields)
+    return query
+
+def generate_nosql_project_query(fields):
+    projected_fields = {field: 1 for field in random.sample(list(fields.keys()), k=2)}
+    return projected_fields
+
+def generate_nosql_match_query(columns, sample_row):
+    column = random.choice(list(columns.keys()))
+    numeric_columns = get_numeric_fields_nosql(columns)        
+    value = sample_row[column]
+
+    if column in numeric_columns:
+        operator = get_random_operation("nosql")
+    else:
+        operator = random.choice(["", "$ne"])
+    
+    if isinstance(value, str):
+        value = f"'{value}'"  # Wrap string values in quotes
+
+    if operator:
+        match_clause = f"{{'{column}': {{'{operator}': {value}}}}}"
+    else:
+        match_clause = f"{{'{column}': {value}}}"
+    return match_clause
+
+def generate_nosql_group_query(columns):
+    # Filter INT type fields
+    numeric_fields = get_numeric_fields_nosql(columns)
+    if not numeric_fields:
+        return "No suitable INT fields for aggregation"
+    agg_func = get_random_aggregation_function()
+    group_field = random.choice(list(columns.keys()))
+    agg_field = random.choice(numeric_fields)
+    agg_func = agg_func.lower()
+    return agg_func, agg_field, group_field
+
+def generate_nosql_group_with_match_query(columns):
+
+    agg_func, agg_field, group_field = generate_nosql_group_query(columns)
+    op = get_random_operation("nosql")
+    
+    aggregate_condition = f"{{'$match': {{'{agg_func}_col': {{'{op}': {random.randint(1, 10)}}}}}}}"
+    return aggregate_condition, agg_func, agg_field, group_field
+
+def generate_nosql_sort_query(fields):
+    orderby_field = random.choice(fields)
+    order_direction = random.choice([1, -1])
+    
+    sort_query = f"{{ '$sort': {{ '{orderby_field}': {order_direction} }} }}"
+    return sort_query
+
+def mongodb_generate_example_queries(collection_name, fields, sample_documnent, user_input):
+    query = ""
+
+    keywords = ["project", "match", "sort", "group", "aggregate"]
+    if any(keyword in user_input.lower() for keyword in keywords):
+
+        if "group" not in user_input.lower() and "aggregate" not in user_input.lower() and "sort" not in user_input.lower():
+            project_fields = {}
+            match_clause = {}
+            if "project" in user_input.lower():
+                project_fields = generate_nosql_project_query(fields)
+            if "match" in user_input.lower():
+                match_clause = generate_nosql_match_query(fields, sample_documnent)
+            query = f"db.{collection_name}.find({match_clause}, {project_fields}).limit(5)"
+        elif "group" not in user_input.lower() and "aggregate" not in user_input.lower():
+            stages = []
+            if "match" in user_input.lower():
+                match_clause = generate_nosql_match_query(fields, sample_documnent)
+                match_clause = ast.literal_eval(match_clause)  # Converts string to dictionary
+                stages.append({'$match' : match_clause})
+            if "project" in user_input.lower():
+                project_fields = generate_nosql_project_query(fields)
+                stages.append({'$project' : project_fields})
+            if "sort" in user_input.lower():
+                sort_query = generate_nosql_sort_query(list(fields.keys()))
+                sort_query = ast.literal_eval(sort_query)
+                stages.append(sort_query)
+            stages.append({ '$limit' : 5})
+            query = f"db.{collection_name}.aggregate({stages})"
+        else:
+            stages = []
+            project_clause = ""
+            if "group" in user_input.lower() and "aggregate" not in user_input.lower() :
+                agg_func, agg_field, group_field = generate_nosql_group_query(fields)
+                if agg_func == "count":
+                    stages.append(ast.literal_eval(f"{{'$group': {{'_id': '${group_field}', '{agg_func}_col': {{'$sum': 1}}}}}}"))
+                else:  
+                    stages.append(ast.literal_eval(f"{{'$group': {{'_id': '${group_field}', '{agg_func}_col': {{'${agg_func}': '${agg_field}'}}}}}}"))
+                project_clause = f"{{'$project': {{'_id': 0, '{group_field}': '$_id', '{agg_func}_col': 1}}}}"
+            if "group" in user_input.lower() and "aggregate" in user_input.lower():
+                aggregate_condition, agg_func, agg_field, group_field = generate_nosql_group_with_match_query(fields)
+                if agg_func == "count":
+                    stages.append(ast.literal_eval(f"{{'$group': {{'_id': '${group_field}', '{agg_func}_col': {{'$sum': 1}}}}}}"))
+                else:  
+                    stages.append(ast.literal_eval(f"{{'$group': {{'_id': '${group_field}', '{agg_func}_col': {{'${agg_func}': '${agg_field}'}}}}}}"))
+                stages.append(ast.literal_eval(aggregate_condition))
+                project_clause = f"{{'$project': {{'_id': 0, '{group_field}': '$_id', '{agg_func}_col': 1}}}}"
+            if "sort" in user_input.lower():
+                sort_query = generate_nosql_sort_query([f"_id", f"{agg_func}_col"])
+                sort_query = ast.literal_eval(sort_query)
+                stages.append(sort_query)
+            if "project" in user_input.lower() and project_clause != "":
+                stages.append(ast.literal_eval(project_clause))
+            query = f"db.{collection_name}.aggregate({stages})"
         
-        if aggregation_function == "AVG":
-            return f"db.{table_name}.aggregate([{{ $group: {{ _id: '${group_by_column}', avg: {{ $avg: '${aggregation_field}' }} }} }}])"
-        elif aggregation_function == "SUM":
-            return f"db.{table_name}.aggregate([{{ $group: {{ _id: '${group_by_column}', sum: {{ $sum: '${aggregation_field}' }} }} }}])"
-        elif aggregation_function == "COUNT":
-            return f"db.{table_name}.aggregate([{{ $group: {{ _id: '${group_by_column}', count: {{ $sum: 1 }} }} }}])"
-        elif aggregation_function == "MAX":
-            return f"db.{table_name}.aggregate([{{ $group: {{ _id: '${group_by_column}', max: {{ $max: '${aggregation_field}' }} }} }}])"
-        elif aggregation_function == "MIN":
-            return f"db.{table_name}.aggregate([{{ $group: {{ _id: '${group_by_column}', min: {{ $min: '${aggregation_field}' }} }} }}])"
-    return None
+    if query == "":
+        return None
+    return query
 
-def generate_example_queries(table_name, user_input, db_type = 'mysql'):
-    print(table_name)
+def generate_example_queries(table_name, user_input, db_type='mysql'):
+    queries = []
     if db_type == 'mysql':
         engine = connect_mysql()
-        columns = get_columns_from_mysql(engine, table_name)
+        columns = get_columns_and_types_from_mysql(engine, table_name)
+        sample_row = get_sample_row_mysql(engine, table_name)
+        query = sql_generate_example_queries(table_name, columns, sample_row, user_input)
+        
+        # No constructs specified. pick 3 examples at random
+        if query is None:
+            sample_input = ["select", "select where", "group by", "having", "order by", "where order by", "group by order by", "aggregate"]
+            example_queries = random.sample(sample_input, 3)
+            for example in example_queries:
+                query = sql_generate_example_queries(table_name, columns, sample_row, example)
+                queries.append(query)
+        else:
+            queries.append(query)
     elif db_type == 'nosql':
         db = connect_mongo()
-        fields = get_fields_from_mongodb(db, table_name)
+        fields = get_field_types_from_mongodb(db, table_name)
+        sample_documnent = get_sample_document_mongodb(db, table_name)
+        query = mongodb_generate_example_queries(table_name, fields, sample_documnent, user_input)
 
-    aggregation_functions = ['AVG', 'SUM', 'COUNT', 'MAX', 'MIN']
-    queries = []
-
-    if "group by" in user_input.lower():
-        # Aggregation query with GROUP BY
-        if db_type == 'mysql':
-            aggregation_function = random.choice(aggregation_functions) 
-            column_for_aggregation = random.choice(columns)  # Select a column for aggregation
-            group_by_column = random.choice(columns)  # Select a column for GROUP BY
-            query = f"SELECT {group_by_column}, {aggregation_function}({column_for_aggregation}) FROM {table_name} GROUP BY {group_by_column}"
+        # No constructs specified. pick 3 examples at random
+        if query is None:
+            sample_input = ["project", "project match", "project sort", "group", "group aggregate", "group sort", "group aggregate sort", "group project", "group sort project"]
+            example_queries = random.sample(sample_input, 3)
+            for example in example_queries:
+                query = mongodb_generate_example_queries(table_name, fields, sample_documnent, example)
+                queries.append(query)
+        else:
             queries.append(query)
 
-        elif db_type == 'nosql':
-            aggregation_function = random.choice(aggregation_functions)  # Select a random aggregation function
-            # Dynamically select the fields for aggregation and grouping
-            group_by_column = random.choice(fields)  # Select a column for GROUP BY
-            aggregation_field = random.choice(fields)  # Select a field for aggregation
-            
-            # Build MongoDB aggregation query based on the selected aggregation function
-            if aggregation_function == "AVG":
-                query = f"db.{table_name}.aggregate([{{ '$group': {{ '_id': '${group_by_column}', 'avg': {{ '$avg': '${aggregation_field}' }} }} }}])"
-            elif aggregation_function == "SUM":
-                query = f"db.{table_name}.aggregate([{{ '$group': {{ '_id': '${group_by_column}', 'sum': {{ '$sum': '${aggregation_field}' }} }} }}])"
-            elif aggregation_function == "COUNT":
-                query = f"db.{table_name}.aggregate([{{ '$group': {{ '_id': '${group_by_column}', 'count': {{ '$sum': 1 }} }} }}])"
-            elif aggregation_function == "MAX":
-                query = f"db.{table_name}.aggregate([{{ '$group': {{ '_id': '${group_by_column}', 'max': {{ '$max': '${aggregation_field}' }} }} }}])"
-            elif aggregation_function == "MIN":
-                query = f"db.{table_name}.aggregate([{{ '$group': {{ '_id': '${group_by_column}', 'min': {{ '$min': '${aggregation_field}' }} }} }}])"
-            queries.append(query)
-
-    elif "select" in user_input.lower():
-        # SELECT query with specific columns
-        if db_type == 'mysql':
-            query = f"SELECT {', '.join(random.sample(columns, 2))} FROM {table_name} LIMIT 5"
-            queries.append(query)
-        elif db_type == 'nosql':
-            random_fields = random.sample(fields, 2)  # Select two random fields
-            projection = {field: 1 for field in random_fields}
-            query = f"db.{table_name}.find().project({projection}).limit(5)"
-            queries.append(query)
-            print("HETERTERTE")
-
-    if not queries:
-        if db_type == 'mysql':
-            query1 = f"SELECT * FROM {table_name} LIMIT 5"
-            query2= f"SELECT {', '.join(random.sample(columns, 2))} FROM {table_name} LIMIT 5"
-            query3 = f"SELECT *, {random.choice(aggregation_functions)}({random.choice(columns)}) FROM {table_name} GROUP BY {random.choice(columns)}"
-            queries = [query1, query2, query3]
-        
-        elif db_type=='nosql':
-            random_fields = random.sample(fields, 2)  # Select two random fields
-            projection = {field: 1 for field in random_fields}
-            query1 = f"db.{table_name}.find().limit(5)"
-            query2 = f"db.{table_name}.find().project({projection}).limit(5)"
-            query3 = f"db.{table_name}.aggregate([{{ '$group': {{ '_id': '$category', 'avg': {{ '$avg': '$price' }} }} }}])" # HAVE TO DYNAMICALLY GENERATE AGGREGATION FUNC TOO!
-            queries = [query1, query2, query3]
     return queries
 
 # General import function to load data from a file and insert into both databases
 def import_data(df, to_sql=True, to_nosql=True,table_name=None):
-    # print("HERE2")
     results = {}
     if to_sql:
         engine = connect_mysql()
