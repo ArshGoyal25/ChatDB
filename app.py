@@ -4,7 +4,7 @@ from flask import Flask, jsonify, request
 from flask_cors import CORS
 import pandas as pd
 import random
-from DatabaseSetup import connect_mysql, connect_mongo, import_data, get_mongo_collection_names, get_mysql_table_names, generate_example_queries
+from DatabaseSetup import connect_mysql, connect_mongo, import_data, get_mongo_collection_names, get_fields_from_mongodb, get_columns_from_mysql, get_collection_details, get_mysql_table_names, generate_example_queries
 import re
 import ast
 from bson import ObjectId
@@ -352,6 +352,24 @@ def get_mongo_collection_columns(db, table_name):
     
     return list(first_document.keys())
 
+# API to get table names based on the database type (MySQL or NoSQL)
+@app.route('/api/get_table_names', methods=['GET'])
+def get_table_names():
+    db_type = request.args.get('db_type')  # Get db_type from query params
+    if db_type == 'mysql':
+        try:
+            engine = connect_mysql()
+            dets = get_mysql_table_names(engine)
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+    elif db_type == 'nosql':
+        try:
+            db = connect_mongo()
+            dets = get_mongo_collection_names(db)
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+        
+    return jsonify({"table_names": dets}), 200
 
 # API endpoint to generate example queries based on user input
 @app.route("/api/generate_query", methods=["POST"])
@@ -359,14 +377,17 @@ def generate_query():
     try:
         data = request.get_json()
         table_name = data.get("table_name")
-        user_input = data.get("user_input")
+        user_input = data.get("user_input").lower()
         db_type = data.get("db_type", "mysql").lower() #defaulting to mysql if no dbtype given by user
         print(table_name, user_input, db_type)
 
         if not user_input:
             return jsonify({"error": "User input for query example is required"}), 400
-        
+
         example_synonyms = ["example", "sample", "instance"]
+        describe_synonyms = ["describe", "outline"]
+
+        #conditions for example query
         if any(word in user_input.lower() for word in example_synonyms):
             if not table_name:
                 if db_type == "mysql":
@@ -382,6 +403,44 @@ def generate_query():
             
             queries = generate_example_queries(table_name, user_input, db_type)
             return jsonify({"queries": queries}), 200
+        
+        #conditions for describe <db_name> or describe table <table_name>
+
+        elif any(word in user_input for word in describe_synonyms):
+            
+            # if table not in user inp, then it means describe db
+            if "table" not in user_input:
+                db = user_input.split(" ")[1]
+                print(db)
+                if db_type == "mysql":
+                    engine = connect_mysql()
+                    dets = get_mysql_table_names(engine)
+                    print(dets)
+
+                else:
+                    db = connect_mongo()
+                    dets = get_mongo_collection_names(db)
+
+                return jsonify({"database_details": dets}), 200
+            
+            # else if table in user input and user has not given tbl name in prompt above and has neiter given it in the input
+            elif not table_name and "table" in user_input and len(user_input.split(" "))<3 :
+                return jsonify({"error": "Please enter a table name in the box above"}), 400
+            
+            else:
+                #else give precendence to tble name given in query
+                if len(user_input.split(" "))==3:
+                    table_name = user_input.split(" ")[2]
+                print(table_name)
+                if db_type == "mysql":
+                    engine = connect_mysql()
+                    res = get_columns_from_mysql(engine, table_name)
+                    print(res)
+
+                else:
+                    engine = connect_mongo()
+                    res = get_fields_from_mongodb(engine, table_name)
+                return jsonify({"table_details": res}), 200
         
         else:
             return handle_natural_language_query(db_type, table_name, user_input)

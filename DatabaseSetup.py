@@ -41,7 +41,6 @@ def connect_mongo():
     except Exception as e:
         print("MongoDB connection error:", e)
         return None
-    
 
 def insert_data_to_mysql(engine, df, table_name=None):
 
@@ -90,10 +89,12 @@ def insert_data_to_mongo(db, df, collection_name=None):
 def get_mysql_table_names(engine):
     query = "SHOW TABLES"
     df = pd.read_sql(query, engine)
+    print(df)
     return df.iloc[:, 0].tolist() # get fisrt col which contains tbl names
 
 def get_mongo_collection_names(db):
     print("temp")
+    print(db.list_collection_names())
     return db.list_collection_names()
 
 def get_columns_from_mysql(engine, table_name):
@@ -104,8 +105,11 @@ def get_columns_from_mysql(engine, table_name):
 def get_fields_from_mongodb(db, collection_name):
     collection = db[collection_name]
     document = collection.find_one()
-
+    print(collection_name)
+    print(collection)
     if document is not None:
+        print("HRHE")
+        print(list(document.keys()))
         return list(document.keys())
     return []
 
