@@ -1,5 +1,6 @@
 # app.py
 
+import json
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 import pandas as pd
@@ -35,27 +36,37 @@ def insert_data():
 
         if table_name is None:
             print(file.filename[len(file.filename)-4: len(file.filename)])
-            if file.filename[len(file.filename)-4: len(file.filename)]=="xlsx":
+            if file.filename[len(file.filename)-4: len(file.filename)]=="xlsx" or file.filename[len(file.filename)-4: len(file.filename)]=="json":
                 file_name = file.filename[0: len(file.filename)-5]
             else:
                 file_name = file.filename[0: len(file.filename)-4]
             table_name = file_name.replace(" ", "_")
             print(table_name)
 
-        try:
-            excel_data = pd.ExcelFile(file)
-            # print(excel_data)
-            df = pd.read_excel(excel_data)
-            # print(df.head())
-        except Exception as e:
-            return jsonify({"error": f"Error reading Excel file: {str(e)}"}), 400
 
         to_sql = db_type.lower() == "sql"
         to_nosql = db_type.lower() == "nosql"
-        result = import_data(df, to_sql=to_sql, to_nosql=to_nosql, table_name=table_name)
-
+        print(to_sql, to_nosql)
+        if to_sql:
+            try:
+                excel_data = pd.ExcelFile(file)
+                # print(excel_data)
+                df = pd.read_excel(excel_data)
+                print(df.head())
+                result = import_data(df, to_sql=to_sql, to_nosql=to_nosql, table_name=table_name)
+                return jsonify(result), 200
+            except Exception as e:
+                return jsonify({"error": f"Error reading Excel file: {str(e)}"}), 400
+        
+        else:
+            # with open(file) as file:
+            df = json.load(file)
+            result = import_data(df, to_sql=to_sql, to_nosql=to_nosql, table_name=table_name)
+            return jsonify(result), 200
+    
+        
         return jsonify(result), 200
-        # return jsonify("success"), 200
+        return jsonify("success"), 200
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500

@@ -1,14 +1,16 @@
 # database_setup.py
+import json
 import pandas as pd
 from sqlalchemy import create_engine, Table, Column, Integer, String, MetaData, Float, text
 from pymongo import MongoClient
 import datetime
 import random
 import ast
+from bson import json_util
 
 # Database configuration - Replace with actual credentials
 MYSQL_USER = "root"
-MYSQL_PASSWORD = ""
+MYSQL_PASSWORD = "root@111"
 mysql_password_encoded = MYSQL_PASSWORD.replace('@', '%40')
 MYSQL_HOST = "localhost"
 MYSQL_PORT = 3306
@@ -73,14 +75,15 @@ def convert_time_columns(df):
 def insert_data_to_mongo(db, df, collection_name=None):
     try:
         collection_name = collection_name or COLLECTION_NAME
-        df = convert_time_columns(df)
+        # df = convert_time_columns(df)
         # print(df.head())
-        data = df.to_dict(orient='records')
-        data = [{str(k): v for k, v in record.items()} for record in data]
+        # data = df.to_dict(orient='records')
+        # data = [{str(k): v for k, v in record.items()} for record in data]
 
         collection = db[collection_name]
-        collection.insert_many(data)
-        print(f"Inserted {len(data)} records into {COLLECTION_NAME} collection.")
+        print(df)
+        collection.insert_one(df)
+        print(f"Inserted {len(df)} records into {COLLECTION_NAME} collection.")
         return {"message": f"Data inserted into MongoDB collection '{collection_name}' successfully"}
     except Exception as e:
         print(f"Error inserting data into MongoDB: {e}")
@@ -105,13 +108,17 @@ def get_columns_from_mysql(engine, table_name):
 
 def get_fields_from_mongodb(db, collection_name):
     collection = db[collection_name]
-    document = collection.find_one()
-    print(collection_name)
-    print(collection)
-    if document is not None:
+    print("HTHEWJ",collection)
+    document = collection.find()
+    document = list(document)
+    print(list(document))
+    if document:
         print("HRHE")
-        print(list(document.keys()))
-        return list(document.keys())
+        # print(list(document.keys()))
+        # return list(document.keys())
+        # print(list(document))
+        return json.loads(json_util.dumps(document))
+        # return document
     return []
 
 def get_random_aggregation_function():
@@ -398,9 +405,11 @@ def generate_example_queries(table_name, user_input, db_type='mysql'):
     elif db_type == 'nosql':
         db = connect_mongo()
         fields = get_field_types_from_mongodb(db, table_name)
+        print(fields)
         sample_documnent = get_sample_document_mongodb(db, table_name)
+        print(sample_documnent)
         query = mongodb_generate_example_queries(table_name, fields, sample_documnent, user_input)
-
+        print(query)
         # No constructs specified. pick 3 examples at random
         if query is None:
             sample_input = ["project", "project match", "project sort", "group", "group aggregate", "group sort", "group aggregate sort", "group project", "group sort project"]
@@ -410,7 +419,7 @@ def generate_example_queries(table_name, user_input, db_type='mysql'):
                 queries.append(query)
         else:
             queries.append(query)
-
+    print("Query", queries)
     return queries
 
 # General import function to load data from a file and insert into both databases
@@ -420,6 +429,7 @@ def import_data(df, to_sql=True, to_nosql=True,table_name=None):
         engine = connect_mysql()
         if engine:
             results['sql'] = insert_data_to_mysql(engine, df, table_name)
+            print(results)
     
     if to_nosql:
         db = connect_mongo()
