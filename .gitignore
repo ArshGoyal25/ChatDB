@@ -2,3 +2,4 @@ project/
 .env
 *.pyc
 __pycache__/
+*/activate.*

@@ -7,7 +7,7 @@ import random
 
 # Database configuration - Replace with actual credentials
 MYSQL_USER = "root"
-MYSQL_PASSWORD = "root@111"
+MYSQL_PASSWORD = ""
 mysql_password_encoded = MYSQL_PASSWORD.replace('@', '%40')
 MYSQL_HOST = "localhost"
 MYSQL_PORT = 3306
