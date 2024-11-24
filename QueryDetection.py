@@ -171,41 +171,113 @@ def handle_mysql_query(table_name, result):
 
     return jsonify({"queries": [query], "message": message}), 200
 
-def handle_mongodb_query(table_name, matched_query, condition, query_type):
-    # MongoDB-specific code
+def handle_mongo_query(collection_name, result):
     engine = connect_mongo()
-    table_columns = get_mongo_collection_columns(engine, table_name)
-    
-    if matched_query['A'] not in table_columns:
-        return jsonify({"error": f"Invalid column '{matched_query['A']}' not found in collection '{table_name}'"}), 400
+    table_columns = get_mongo_collection_columns(engine, collection_name)
 
-    pipeline = []
-    
-    if condition:
-        condition_dict = parse_condition(condition, table_columns)
+    project_columns = result["project_columns"]
+    aggregate_columns = result["columns"]
+    query_type = result["type"]
+    group_by_column = result["group_by"]
+    where_condition = result["where_condition"]
+    having_condition = result["having_condition"]
+    aggregate_function = result["aggregate_function"]
+    order_by_column = result["order_by"]
+    order_direction = result["order_direction"]
+    limit_clause = result["top"]
+
+    # Initialize missing clauses message
+    missing_clauses = []
+
+    # Construct WHERE clause
+    if where_condition:
+        condition_dict = parse_condition(where_condition, table_columns)
         if not condition_dict:
-            return jsonify({"error": "Invalid condition or column name in the WHERE clause"}), 400
-        pipeline.append({"$match": condition_dict})
-
-    if query_type == "aggregate":
-        # Aggregate query (with GROUP BY)
-        group_stage = {
-            "$group": {
-                "_id": f"${matched_query['B']}",
-                f"{matched_query['B']}_{matched_query['A']}": {f"${aggregate_function}": f"${matched_query['A']}"}
-            }
-        }
-        sort_stage = {
-            "$sort": {f"{matched_query['B']}_{matched_query['A']}": -1}  # descending order
-        }
-        
-        pipeline.append(group_stage)
-        pipeline.append(sort_stage)
+            return jsonify({"error": "Invalid condition or column name in the WHERE clause."}), 400
+        match_stage = {"$match": condition_dict}
     else:
-        # Simple SELECT query with WHERE clause
-        pipeline.append({"$project": {matched_query['A']: 1}})
+        match_stage = {}
+        missing_clauses.append("WHERE clause")
 
-    return jsonify({"queries": pipeline}), 200
+    # Construct HAVING clause
+    if having_condition:
+        having_dict = parse_condition(having_condition, table_columns)
+        if not having_dict:
+            return jsonify({"error": "Invalid condition or column name in the HAVING clause."}), 400
+        having_stage = {"$match": having_dict}
+    else:
+        having_stage = {}
+        if group_by_column:
+            missing_clauses.append("HAVING clause")
+
+    # Construct ORDER BY clause
+    if order_by_column:
+        sort_stage = {"$sort": {order_by_column: 1 if order_direction == "ASC" else -1}}
+    else:
+        sort_stage = {}
+        missing_clauses.append("ORDER BY clause")
+
+    # Construct LIMIT clause
+    if limit_clause:
+        limit_stage = {"$limit": limit_clause}
+    else:
+        limit_stage = {"$limit": 10}  # Default limit if not specified
+        missing_clauses.append("LIMIT clause")
+
+    # Build aggregate query
+    if query_type == "aggregate":
+        if not aggregate_function:
+            return jsonify({"error": "Aggregate function not specified."}), 400
+
+        if group_by_column:
+            pipeline = [
+                match_stage,
+                {"$group": {
+                    "_id": f"${group_by_column}",
+                    f"{aggregate_function}_{aggregate_columns['A']}": {f"${aggregate_function}": f"${aggregate_columns['A']}"}
+                }},
+                having_stage,
+                sort_stage,
+                limit_stage
+            ]
+        else:
+            pipeline = [
+                match_stage,
+                {"$group": {
+                    "_id": None,
+                    f"{aggregate_function}_{aggregate_columns['A']}": {f"${aggregate_function}": f"${aggregate_columns['A']}"}
+                }},
+                having_stage,
+                sort_stage,
+                limit_stage
+            ]
+    else:  # Build Simple SELECT query
+        if not project_columns:
+            project_columns = {"_id": 0}  # Exclude `_id` by default for MongoDB projections
+        else:
+            project_columns = {col: 1 for col in project_columns}
+
+        pipeline = [
+            match_stage,
+            {"$project": project_columns},
+            sort_stage,
+            limit_stage
+        ]
+
+    # Build helpful message for missing clauses
+    message = "Here is your query pipeline:"
+    if missing_clauses:
+        message += "\n\nIt looks like you may have missed the following stages. Here’s how you can use them:\n"
+        if "WHERE clause" in missing_clauses:
+            message += "1. WHERE stage: Use `$match` to filter documents, e.g., `{'age': {'$gt': 30}}`.\n"
+        if "HAVING clause" in missing_clauses:
+            message += "2. HAVING stage: Use `$match` after `$group` to filter grouped results, e.g., `{'count': {'$gt': 5}}`.\n"
+        if "ORDER BY clause" in missing_clauses:
+            message += "3. ORDER BY stage: Use `$sort` to sort results, e.g., `{'age': 1}` for ascending.\n"
+        if "LIMIT clause" in missing_clauses:
+            message += "4. LIMIT stage: Use `$limit` to restrict the number of results, e.g., `10`.\n"
+    print("Pipeline:", pipeline)
+    return jsonify({"queries": [str(pipeline)], "message": message}), 200
 
 def detect_natural_language_query(user_input):
     AGGREGATE_FUNCTIONS = {
@@ -336,7 +408,7 @@ def handle_natural_language_query(db_type, table_name, user_input):
 
     if db_type == 'mysql':
         return handle_mysql_query(table_name, result)
-    elif db_type == 'mongodb':
-        return handle_mongodb_query(table_name, result)
+    elif db_type == 'nosql':
+        return handle_mongo_query(table_name, result)
     else:
         return jsonify({"error": f"Unsupported database type: {db_type}"}), 400
