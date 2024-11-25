@@ -1,7 +1,8 @@
+import random
 import re
 from flask import Flask, jsonify, request
 import pandas as pd
-from DatabaseSetup import connect_mysql, connect_mongo, get_columns_from_mysql, get_fields_from_mongodb
+from DatabaseSetup import connect_mysql, connect_mongo, get_columns_from_mysql, get_fields_from_mongodb, get_numeric_cols_sql, get_numeric_fields_nosql, get_sample_document_mongodb, get_field_types_from_mongodb
 
 AGGREGATE_FUNCTIONS = {
     'total': 'SUM',
@@ -109,7 +110,15 @@ def parse_condition_sql(condition, valid_columns, agg_col = None, grp_col = None
 def handle_mysql_query(table_name, result):
     engine = connect_mysql()
     table_columns = get_table_columns(engine, table_name)
+    random_col1 = random.choice(list(table_columns.keys()))
+    random_col2 = random.choice(list(table_columns.keys()))
+    random_col3 = random.choice(list(table_columns.keys()))
 
+    errors = result["errors"]
+    suggestions = result["suggestions"]
+    if errors:
+        return jsonify({"error": errors[0], "suggestions": suggestions}), 400
+    
     project_columns = result["project_columns"]
     for col in project_columns:
         if col not in table_columns:
@@ -117,12 +126,15 @@ def handle_mysql_query(table_name, result):
 
     aggregate_columns = result["columns"]
     if aggregate_columns is not None:
+        suggestions = [f"Suggested Column Names: {random_col1}, {random_col2}, {random_col3}"]
         if 'A' in aggregate_columns.keys():
             if aggregate_columns['A'] not in table_columns:
-                return jsonify({"error": f"Invalid columns. '{aggregate_columns['A']}' not found in table '{table_name}'. It looks like the columns you are using to aggregate are not in the table. Please update them. To understand more about which columns are present in the table you choose, run the command 'describe table' or 'describe collection' depending on the database type"}), 400
+                error = f"Invalid columns. '{aggregate_columns['A']}' not found in table '{table_name}'. It looks like the columns you are using to aggregate are not in the table. Please update them. To understand more about which columns are present in the table you choose, run the command 'describe table' or 'describe collection' depending on the database type"
+                return jsonify({"error": error, "suggestions": suggestions}), 400
         if 'B' in aggregate_columns.keys():
             if aggregate_columns['B'] not in table_columns:
-                return jsonify({"error": f"Invalid columns. '{aggregate_columns['B']}' not found in table '{table_name}'. It looks like the columns you are using to aggregate are not in the table. Please update them. To understand more about which columns are present in the table you choose, run the command 'describe table' or 'describe collection' depending on the database type"}), 400
+                error = f"Invalid columns. '{aggregate_columns['B']}' not found in table '{table_name}'. It looks like the columns you are using to aggregate are not in the table. Please update them. To understand more about which columns are present in the table you choose, run the command 'describe table' or 'describe collection' depending on the database type"
+                return jsonify({"error": error, "suggestions": suggestions}), 400
     
     query_type = result["type"]
     group_by_clause = result["group_by"]
@@ -181,7 +193,7 @@ def handle_mysql_query(table_name, result):
 
         # Build the aggregate query
         if group_by_clause:
-            query = f"SELECT {aggregate_columns['B']}, {aggregate_function}({aggregate_columns['A']}) AS {aggregate_columns['B']}_{aggregate_columns['A']} FROM {table_name} {where_clause} GROUP BY {aggregate_columns['B']} {having_clause} {order_clause} {limit_clause}"
+            query = f"SELECT {aggregate_columns['B']}, {aggregate_function}({aggregate_columns['A']}) AS {aggregate_function.lower()}_{aggregate_columns['A']} FROM {table_name} {where_clause} GROUP BY {aggregate_columns['B']} {having_clause} {order_clause} {limit_clause}"
         else:
             query = f"SELECT {aggregate_function}({aggregate_columns['A']}) AS {aggregate_columns['A']}_{aggregate_function} FROM {table_name} {where_clause} {having_clause} {order_clause} {limit_clause}"
     
@@ -192,18 +204,19 @@ def handle_mysql_query(table_name, result):
         query = f"SELECT {', '.join(project_columns)} FROM {table_name} {where_clause} {order_clause} {limit_clause}"
 
     message = "Here is your query:"
+    suggestions = []
     if missing_clauses:
-        message += "\n\nIt looks like you may have missed the following clauses. Here’s how you can use them:\n"
+        message += "\n\nIt looks like you may have missed the following clauses. Here’s how you can use them:"
         if "WHERE clause" in missing_clauses:
-            message += "1. WHERE clause: You can filter results based on certain conditions, e.g., 'WHERE age > 30'.\n"
+            suggestions.append("WHERE clause: You can filter results based on certain conditions, e.g., 'WHERE age > 30'")            
         if "HAVING clause" in missing_clauses:
-            message += "2. HAVING clause: Use this for filtering grouped results, e.g., 'HAVING COUNT(*) > 5'.\n"
+            suggestions.append("HAVING clause: Use this for filtering grouped results, e.g., 'HAVING COUNT(*) > 5'")
         if "ORDER BY clause" in missing_clauses:
-            message += "3. ORDER BY clause: You can sort the results, e.g., 'ORDER BY age DESC'.\n"
+            suggestions.append("ORDER BY clause: You can sort the results, e.g., 'ORDER BY age DESC'")
         if "LIMIT clause" in missing_clauses:
-            message += "4. LIMIT clause: You can limit the number of results returned, e.g., 'LIMIT 10'.\n"
+            suggestions.append("LIMIT clause: You can limit the number of results returned, e.g., 'LIMIT 10'")
 
-    return jsonify({"queries": [query], "message": message}), 200
+    return jsonify({"queries": [query],"suggestions": suggestions, "message": message}), 200
 
 
 import re
@@ -321,8 +334,21 @@ def is_float(value: str) -> bool:
 
 def handle_mongo_query(collection_name, result):
     engine = connect_mongo()
-    table_columns = get_mongo_collection_columns(engine, collection_name)
-    print(result)
+    table_columns = get_sample_document_mongodb(engine, collection_name)
+    table_columns = list(table_columns.keys())
+    fields = get_field_types_from_mongodb(engine, collection_name)
+    numeric_cols = get_numeric_fields_nosql(fields)
+
+
+    random_col1 = random.choice(table_columns)
+    random_col2 = random.choice(table_columns)
+    random_col3 = random.choice(table_columns)
+
+    errors = result["errors"]
+    suggestions = result["suggestions"]
+    if errors:
+        return jsonify({"error": errors[0], "suggestions": suggestions}), 400
+    
     project_columns = result["project_columns"]
     aggregate_columns = result["columns"]
     query_type = result["type"]
@@ -438,8 +464,39 @@ def handle_mongo_query(collection_name, result):
     # db.coffee_shop.find({'$match': {'product_type': {'$eq': 'premium beans'}}}, {'_id': 0}).limit(5)
     return jsonify({"queries": [query], "message": message}), 200
 
-def detect_natural_language_query(user_input):
+def detect_natural_language_query(user_input, table_name=None, db_type = None):
     
+    if(db_type == "mysql"):
+        engine = connect_mysql()  
+        table_columns = get_table_columns(engine, table_name)
+        numeric_cols = get_numeric_cols_sql(table_columns)
+        table_columns = list(table_columns.keys())
+    else:
+        engine = connect_mongo()
+        table_columns = get_sample_document_mongodb(engine, table_name)
+        table_columns = list(table_columns.keys())
+        fields = get_field_types_from_mongodb(engine, table_name)
+        numeric_cols = get_numeric_fields_nosql(fields)
+
+    random_key1 = random.choice(list(AGGREGATE_FUNCTIONS.keys()))
+    random_key2 = random.choice(list(AGGREGATE_FUNCTIONS.keys()))
+    random_col1 = random.choice(table_columns)
+    random_col2 = random.choice(table_columns)
+    random_col3 = random.choice(table_columns)
+    random_numeric_col1 = random.choice(numeric_cols)
+    random_numeric_col2 = random.choice(numeric_cols)
+    while(random_numeric_col1 == random_col1):
+        random_numeric_col1 = random.choice(numeric_cols)
+
+    while(random_numeric_col2 == random_col2):
+        random_numeric_col2 = random.choice(numeric_cols)
+
+    while(random_col1 == random_col2):
+        random_col2 = random.choice(table_columns)
+    while(random_col2 == random_col3):
+        random_col3 = random.choice(table_columns)
+    conditions = ["is equal to", "is not equal to", "is less than", "is less than or equal to", "is greater than", "is greater than or equal to"]
+    random_cond = random.choice(conditions)
     # Patterns for different clauses
     aggregate_patterns = [
         r"(total|sum) (?P<A>\w+)",
@@ -473,7 +530,9 @@ def detect_natural_language_query(user_input):
         "order_by": None,
         "order_direction": "ASC",  # Default order direction
         "top": None,
-        "project_columns": []
+        "project_columns": [],
+        "errors": [],
+        "suggestions": []
     }
 
     # Extract columns at the start of the query before any aggregate function or clauses
@@ -516,6 +575,16 @@ def detect_natural_language_query(user_input):
                 )
                 break
 
+    if ("group by" in user_input.lower() or "grouped by" in user_input.lower()) and not result["aggregate_function"]:
+        result["errors"].append("A GROUP BY Query cannot be generated without an Aggregate Function. Please include a word correspondng to an aggregate function before the aggregate column. Words such as maximum, lowest, total, etc. apart from direct aggregates are also are supported")
+        result["suggestions"].append(f"{random_key1} {user_input}")
+        return result
+    
+    if ("group by" in user_input.lower() or "grouped by" in user_input.lower()) and result["group_by"] == False:
+        result["errors"].append("Invalid Group By Prompt Detected. Make sure you have specified both an aggregate column name and group column name")
+        result["suggestions"].append(f"Suggested Columns: {random_col1}, {random_col2}, {random_numeric_col1}, {random_numeric_col2}")
+        return result
+
     top_match = re.search(top_pattern, user_input, re.IGNORECASE)
     if top_match:
         result["top"] = top_match.group().strip()
@@ -528,12 +597,28 @@ def detect_natural_language_query(user_input):
     where_match = re.search(where_pattern, user_input.lower(), re.IGNORECASE)
     if where_match:
         result["where_condition"] = where_match.group("condition").strip()
+
+    if "where" in user_input.lower() and not result["where_condition"]:
+        result["errors"].append("The keyword 'where' is used in the input provided. Please note that the WHERE clause cannot be used without a condition. Please include a condition in your query.")
+        result["suggestions"].append(f"where {random_col2} {random_cond} {random.randint(1, 50)}")
+        return result
     
     # Extract HAVING clause (if any)
     having_match = re.search(having_pattern, user_input, re.IGNORECASE)
     if having_match:
         result["having_condition"] = having_match.group("condition").strip()
-    
+
+    if result["having_condition"] and not result["group_by"]:
+        result["errors"].append("The keyword 'having' is used in the input provided. Please note that the HAVING clause cannot be used without GROUP BY. Please include a GROUP BY clause before the HAVING clause in your query.")
+        result["suggestions"].append(f"{random_key1} {random_numeric_col1} group by {random_col1} {user_input}")
+        result["suggestions"].append(f"{random_key2} {random_numeric_col2} group by {random_col2} {user_input}")
+        return result
+
+    if "having" in user_input.lower() and not result["having_condition"]:
+        result["errors"].append("The keyword 'having' is used in the input provided. Please note that the HAVING clause cannot be used without a condition. Please include a condition in your query.")
+        result["suggestions"].append(f"having {random_cond} {random.randint(1, 50)}")
+        return result
+
     # Extract ORDER BY clause (if any) with ascending or descending
     order_by_match = re.search(order_by_pattern, user_input, re.IGNORECASE)
     if order_by_match:
@@ -544,13 +629,26 @@ def detect_natural_language_query(user_input):
         elif "asc" in user_input.lower() or "ascending" in user_input.lower():
             result["order_direction"] = "ASC"
 
+    if "order by" in user_input.lower() and not result["order_by"]:
+        result["errors"].append("The keyword 'order by' is used in the input provided but no columns are specified. Please note that the ORDER BY clause must be used with the column(s) to be sorted.")
+        result["suggestions"].append(f"order by {random_col1}")
+        return result
+
+    if not result["columns"] and not result["where_condition"] and not result["having_condition"] and not result["order_by"] and not result["top"] and not result["project_columns"]:
+        result["errors"].append("Query does not match any recognizable patterns. Please check your syntax.")
+        result["suggestions"].append(f"{random_key1} {random_numeric_col1} group by {random_col2}")
+        result["suggestions"].append(f" where {random_numeric_col1} {random_cond} {random.randint(1, 50)} ")
+        result["suggestions"].append(f" {random_key2} {random_col3} order by {random_col1} asc")
+        result["suggestions"].append(f" {random_col2}, {random_col3} limit {random.randint(1, 10)}" )
+        return result
+
     return result
 
 def handle_natural_language_query(db_type, table_name, user_input):
     if not table_name:
         return jsonify({"error": "A table name is required for this kind of query"}), 400
     
-    result = detect_natural_language_query(user_input)
+    result = detect_natural_language_query(user_input, table_name, db_type)
     for key, value in result.items():
         print(f"{key}: {value}")
 
