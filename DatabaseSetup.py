@@ -25,8 +25,6 @@ COLLECTION_NAME='sales'
 # Connect to MySQL
 def connect_mysql():
     try:
-        #st = f"mysql+mysqlconnector://{MYSQL_USER}:{mysql_password_encoded}@{MYSQL_HOST}:{MYSQL_PORT}/{MYSQL_DATABASE}"
-        # print(st)
         engine = create_engine(f"mysql+mysqlconnector://{MYSQL_USER}:{mysql_password_encoded}@{MYSQL_HOST}:{MYSQL_PORT}/{MYSQL_DATABASE}")
         print("Connected to MySQL")
         return engine
@@ -49,7 +47,6 @@ def insert_data_to_mysql(engine, df, table_name=None):
 
     try:
         table_name = table_name or "temp"
-        # print(df.head())
         df.to_sql(name=table_name, con=engine, if_exists='replace', index=False)
         print(f"Data inserted into MySQL table '{table_name}'")
         return {"message": f"Data inserted into SQL table '{table_name}' successfully"}
@@ -81,7 +78,6 @@ def insert_data_to_mongo(db, df, collection_name=None):
         # data = [{str(k): v for k, v in record.items()} for record in data]
 
         collection = db[collection_name]
-        print(df)
         collection.insert_one(df)
         print(f"Inserted {len(df)} records into {COLLECTION_NAME} collection.")
         return {"message": f"Data inserted into MongoDB collection '{collection_name}' successfully"}
@@ -93,18 +89,25 @@ def insert_data_to_mongo(db, df, collection_name=None):
 def get_mysql_table_names(engine):
     query = "SHOW TABLES"
     df = pd.read_sql(query, engine)
-    print(df)
     return df.iloc[:, 0].tolist() # get fisrt col which contains tbl names
 
 def get_mongo_collection_names(db):
-    print("temp")
-    print(db.list_collection_names())
     return db.list_collection_names()
 
 def get_columns_from_mysql(engine, table_name):
-    query = f"SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='{table_name}'"
-    df = pd.read_sql(query, engine)
-    return df['COLUMN_NAME'].tolist()
+    with engine.connect() as connection:
+        query = text(f"DESCRIBE {table_name}")
+        result = connection.execute(query)
+        columns = {}
+        for row in result:
+            print(row)
+            columns[row[0]] = row[1]
+    return columns
+    # query = f"SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='{table_name}'"
+    # df = pd.read_sql(query, engine)
+    # print(df.dtypes)
+    # print(df.info())
+    # return df['COLUMN_NAME'].tolist()
 
 def get_fields_from_mongodb(db, collection_name):
     collection = db[collection_name]
@@ -139,6 +142,7 @@ def get_columns_and_types_from_mysql(engine, table_name):
         result = connection.execute(query)
         columns = {}
         for row in result:
+            print(row)
             columns[row[0]] = row[1]
     return columns
 
@@ -233,9 +237,15 @@ def generate_sql_aggregate(columns):
 
 def sql_generate_example_queries(table_name, columns, sample_row, user_input):
     query = ""
+    limit_columns=None
     project_columns = where_clause = agg_func = agg_column = group_column = orderby_column = order_direction = having_op = None
     if "select" in user_input.lower():
         project_columns = generate_sql_select(columns)
+    if "limit" in user_input.lower():
+        if "select" not in user_input.lower():
+            user_input+="select "
+            return sql_generate_example_queries(table_name, columns, sample_row, user_input)
+        limit_columns = "Limit"
     if "where" in user_input.lower():
         where_clause, project_columns = generate_sql_where_clause(columns, sample_row)
     if "aggregate" in user_input.lower():
@@ -255,15 +265,23 @@ def sql_generate_example_queries(table_name, columns, sample_row, user_input):
         query += f"SELECT {', '.join(project_columns)} FROM {table_name}"
     if where_clause is not None:
         query += f" WHERE {where_clause}"
+        if limit_columns is not None and group_column is None and having_op is None and orderby_column is None:
+            query += f" LIMIT {10}"
     if group_column is not None:
         query += f" GROUP BY {group_column}"
+        if limit_columns is not None and having_op is None and orderby_column is None:
+            query += f" LIMIT {10}"
     if having_op is not None:
         query += f" HAVING {agg_func}({agg_column}) {having_op} {random.randint(1, 10)}"
+        if limit_columns is not None and orderby_column is None:
+            query += f" LIMIT {10}"
     if orderby_column is not None:
         query += f" ORDER BY {orderby_column} {order_direction}"
-    
+        if limit_columns is not None:    
+            query += f" LIMIT {10}"
     if group_column is None and having_op is None and "aggregate" not in user_input.lower() and project_columns is not None:
-        query += f" LIMIT 5"
+        if limit_columns is not None:
+            query += f" LIMIT {10}"
 
     if query == "":
         return None
@@ -388,7 +406,7 @@ def generate_example_queries(table_name, user_input, db_type='mysql'):
         
         # No constructs specified. pick 3 examples at random
         if query is None:
-            sample_input = ["select", "select where", "group by", "having", "order by", "where order by", "group by order by", "aggregate"]
+            sample_input = ["select", "select where", "group by", "having", "order by", "where order by", "group by order by", "aggregate", "limit"]
             example_queries = random.sample(sample_input, 3)
             for example in example_queries:
                 query = sql_generate_example_queries(table_name, columns, sample_row, example)
@@ -398,11 +416,8 @@ def generate_example_queries(table_name, user_input, db_type='mysql'):
     elif db_type == 'nosql':
         db = connect_mongo()
         fields = get_field_types_from_mongodb(db, table_name)
-        print(fields)
         sample_documnent = get_sample_document_mongodb(db, table_name)
-        print(sample_documnent)
         query = mongodb_generate_example_queries(table_name, fields, sample_documnent, user_input)
-        print(query)
         # No constructs specified. pick 3 examples at random
         if query is None:
             sample_input = ["project", "project match", "project sort", "group", "group aggregate", "group sort", "group aggregate sort", "group project", "group sort project"]
@@ -412,7 +427,6 @@ def generate_example_queries(table_name, user_input, db_type='mysql'):
                 queries.append(query)
         else:
             queries.append(query)
-    print("Query", queries)
     return queries
 
 # General import function to load data from a file and insert into both databases
