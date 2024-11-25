@@ -427,6 +427,7 @@ def generate_example_queries(table_name, user_input, db_type='mysql'):
                 queries.append(query)
         else:
             queries.append(query)
+
     return queries
 
 # General import function to load data from a file and insert into both databases

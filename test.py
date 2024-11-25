@@ -54,7 +54,7 @@ def detect_natural_language_query(user_input):
     }
 
     # Extract columns at the start of the query before any aggregate function or clauses
-    column_pattern = r"^([\w\s,]+?)(?=\s*(total|highest|average|minimum|maximum|where|grouped by|group by|order by|sort by|asc|desc|ascending|descending|top\s*\d+|limit\s*\d+))"
+    column_pattern = r"^([\w\s,]+?)(?=\s*(total|highest|average|minimum|maximum|where|order|grouped by|group by|sort by|asc|desc|ascending|descending|top\s*\d+|limit\s*\d+))"
     
     # Check for columns at the start of the query
     column_match = re.search(column_pattern, user_input, re.IGNORECASE)
@@ -127,7 +127,8 @@ def detect_natural_language_query(user_input):
 
 # Test Cases
 queries = [
-    "transaction_qty where product_type is equal to premium beans",
+    "store_id where product_type is equal to premium beans",
+    "product_category, store_location where store_location is equal to lower manhattan",
     "total transaction_qty where store_location is equal to Lower Manhattan order by transaction_qty desc",
     "product_id, product_type, transaction_qty where store_location is equal to Lower Manhattan order by transaction_qty desc",
     "highest unit_price group by product_category where product_category is equal to Coffee",
@@ -136,8 +137,9 @@ queries = [
     "total transaction_qty where product_type is equal to Gourmet brewed coffee order by unit_price descending",
     "maximum transaction_qty group by store_location where transaction_qty is equal to 4 order by transaction_qty ascending",
     "transaction_qty where product_type is equal to 'Gadgets' and product_detail is equal to 'Red'",
-    "transaction_qty where store_location is equal to lower manhattan order by transaction_qty desc top 10",
-    "product_type, transaction_qty limit 5 where store_location is equal to lower manhattan order by transaction_qty desc"
+    "transaction_qty where store_location is equal to 'West' order by transaction_qty desc top 10",
+    "product_type, transaction_qty limit 5 where store_location is equal to lower manhattan order by transaction_qty desc",
+    "product_type, transaction_qty where store_location is equal to lower manhattan order by transaction_qty desc top 10"
 ]
 
 
