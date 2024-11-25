@@ -111,7 +111,7 @@ def get_columns_from_mysql(engine, table_name):
 
 def get_fields_from_mongodb(db, collection_name):
     collection = db[collection_name]
-    document = collection.find()
+    document = collection.find().limit(5)
     document = list(document)
     if document:
         return json.loads(json_util.dumps(document))
@@ -337,11 +337,21 @@ def generate_nosql_sort_query(fields):
     sort_query = f"{{ '$sort': {{ '{orderby_field}': {order_direction} }} }}"
     return sort_query
 
-def mongodb_generate_example_queries(collection_name, fields, sample_documnent, user_input):
+def mongodb_generate_example_queries(collection_name, fields, sample_document, user_input):
     query = ""
 
-    keywords = ["project", "match", "sort", "group", "aggregate"]
+    # Keywords to identify user intent
+    keywords = ["project", "match", "sort", "group", "aggregate", "limit"]
+
     if any(keyword in user_input.lower() for keyword in keywords):
+
+        limit_value = 5  # Default limit value
+        # Extract limit value from the user input if present
+        if "limit" in user_input.lower():
+            try:
+                limit_value = int([word for word in user_input.split() if word.isdigit()][0])
+            except (IndexError, ValueError):
+                pass  # Use default if parsing fails
 
         if "group" not in user_input.lower() and "aggregate" not in user_input.lower() and "sort" not in user_input.lower():
             project_fields = {}
@@ -349,38 +359,38 @@ def mongodb_generate_example_queries(collection_name, fields, sample_documnent, 
             if "project" in user_input.lower():
                 project_fields = generate_nosql_project_query(fields)
             if "match" in user_input.lower():
-                match_clause = generate_nosql_match_query(fields, sample_documnent)
-            query = f"db.{collection_name}.find({match_clause}, {project_fields}).limit(5)"
+                match_clause = generate_nosql_match_query(fields, sample_document)
+            query = f"db.{collection_name}.find({match_clause}, {project_fields}).limit({limit_value})"
         elif "group" not in user_input.lower() and "aggregate" not in user_input.lower():
             stages = []
             if "match" in user_input.lower():
-                match_clause = generate_nosql_match_query(fields, sample_documnent)
+                match_clause = generate_nosql_match_query(fields, sample_document)
                 match_clause = ast.literal_eval(match_clause)  # Converts string to dictionary
-                stages.append({'$match' : match_clause})
+                stages.append({'$match': match_clause})
             if "project" in user_input.lower():
                 project_fields = generate_nosql_project_query(fields)
-                stages.append({'$project' : project_fields})
+                stages.append({'$project': project_fields})
             if "sort" in user_input.lower():
                 sort_query = generate_nosql_sort_query(list(fields.keys()))
                 sort_query = ast.literal_eval(sort_query)
                 stages.append(sort_query)
-            stages.append({ '$limit' : 5})
+            stages.append({'$limit': limit_value})
             query = f"db.{collection_name}.aggregate({stages})"
         else:
             stages = []
             project_clause = ""
-            if "group" in user_input.lower() and "aggregate" not in user_input.lower() :
+            if "group" in user_input.lower() and "aggregate" not in user_input.lower():
                 agg_func, agg_field, group_field = generate_nosql_group_query(fields)
                 if agg_func == "count":
                     stages.append(ast.literal_eval(f"{{'$group': {{'_id': '${group_field}', '{agg_func}_col': {{'$sum': 1}}}}}}"))
-                else:  
+                else:
                     stages.append(ast.literal_eval(f"{{'$group': {{'_id': '${group_field}', '{agg_func}_col': {{'${agg_func}': '${agg_field}'}}}}}}"))
                 project_clause = f"{{'$project': {{'_id': 0, '{group_field}': '$_id', '{agg_func}_col': 1}}}}"
             if "group" in user_input.lower() and "aggregate" in user_input.lower():
                 aggregate_condition, agg_func, agg_field, group_field = generate_nosql_group_with_match_query(fields)
                 if agg_func == "count":
                     stages.append(ast.literal_eval(f"{{'$group': {{'_id': '${group_field}', '{agg_func}_col': {{'$sum': 1}}}}}}"))
-                else:  
+                else:
                     stages.append(ast.literal_eval(f"{{'$group': {{'_id': '${group_field}', '{agg_func}_col': {{'${agg_func}': '${agg_field}'}}}}}}"))
                 stages.append(ast.literal_eval(aggregate_condition))
                 project_clause = f"{{'$project': {{'_id': 0, '{group_field}': '$_id', '{agg_func}_col': 1}}}}"
@@ -390,11 +400,13 @@ def mongodb_generate_example_queries(collection_name, fields, sample_documnent, 
                 stages.append(sort_query)
             if "project" in user_input.lower() and project_clause != "":
                 stages.append(ast.literal_eval(project_clause))
+            stages.append({'$limit': limit_value})
             query = f"db.{collection_name}.aggregate({stages})"
-        
+
     if query == "":
         return None
     return query
+
 
 def generate_example_queries(table_name, user_input, db_type='mysql'):
     queries = []
