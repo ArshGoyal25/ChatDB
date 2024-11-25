@@ -3,6 +3,21 @@ from flask import Flask, jsonify, request
 import pandas as pd
 from DatabaseSetup import connect_mysql, connect_mongo, get_columns_from_mysql, get_fields_from_mongodb
 
+AGGREGATE_FUNCTIONS = {
+    'total': 'SUM',
+    'highest': 'MAX',
+    'average': 'AVG',
+    'minimum': 'MIN',
+    'maximum': 'MAX',
+    'find': 'COUNT',
+    'lowest': 'MIN',
+    'count': 'COUNT',
+    'max': 'MAX',
+    'min': 'MIN',
+    'sum': 'SUM',
+    'avg': 'AVG'
+}
+
 def get_table_columns(engine, table_name):
     return get_columns_from_mysql(engine, table_name)
 
@@ -11,20 +26,6 @@ def get_mongo_collection_columns(db, table_name):
 
 def parse_condition_sql(condition, valid_columns, agg_col = None, grp_col = None, having_condition = False):
     condition = condition.strip().lower()
-    AGGREGATE_FUNCTIONS = {
-        'total': 'SUM',
-        'highest': 'MAX',
-        'average': 'AVG',
-        'minimum': 'MIN',
-        'maximum': 'MAX',
-        'find': 'COUNT',
-        'lowest': 'MIN',
-        'count': 'COUNT',
-        'max': 'MAX',
-        'min': 'MIN',
-        'sum': 'SUM',
-        'avg': 'AVG'
-    }
 
     operators = {
         "!=": "!=",
@@ -214,7 +215,7 @@ def is_float(value):
     except ValueError:
         return False
 
-def parse_condition_nosql(condition: str, valid_columns: list) -> dict:
+def parse_condition_nosql(condition, valid_columns, agg_col = None, grp_col = None, having_condition = False):
         
     operators = {
         "=": "$eq",
@@ -246,9 +247,33 @@ def parse_condition_nosql(condition: str, valid_columns: list) -> dict:
                 left = left.strip()
                 right = right.strip()
 
+                if(having_condition):
+                    print("fdjnfjnfjd")
+                    vals = left.split(" ")
+                    if(len(vals) == 2):
+                        agg_func_obtained = None
+                        agg_col_obtained = vals[1]
+                        if(agg_col_obtained != agg_col and agg_col_obtained != grp_col):
+                            return False, "Only the aggregate column or the group by column can be used in having clause"
+                        for key in AGGREGATE_FUNCTIONS:
+                            if(key == vals[0]):
+                                agg_func_obtained = AGGREGATE_FUNCTIONS[key]
+                        if(agg_func_obtained == None):
+                            return False,"Invalid aggregate function used in having clause"
+                        left = f"{agg_func_obtained.lower()}_{agg_col_obtained}"
+                    else:
+                        agg_col_obtained = left
+                        if(agg_col_obtained == agg_col):
+                            return False, "The aggregate column can be used in having clause only with an aggregate function"
+                        if(agg_col_obtained != grp_col):
+                            return False, "Only the group by column can be used in having clause without an aggregate function"
+                # else:
+                #     if left not in valid_columns:
+                #         return False, "Invalid column {left} used in condition statement"
+                    
                 # Ensure the left side is a valid column
-                if left not in valid_columns:
-                    return None
+                # if left not in valid_columns:
+                #     return None
 
                 # Handle right side values based on type (string, number, float)
                 if right.startswith('"') and right.endswith('"'):
@@ -268,15 +293,15 @@ def parse_condition_nosql(condition: str, valid_columns: list) -> dict:
                 mongo_query.append(condition_dict)
                 break
         else:
-            return None
+            return False, "Invalid Operators Used in condition statement"
 
     if len(mongo_query) > 1:
         if re.search(r'\bor\b', condition):
-            return {"$or": mongo_query}
+            return True, {"$or": mongo_query}
         else:
-            return {"$and": mongo_query}
+            return True, {"$and": mongo_query}
 
-    return mongo_query[0]
+    return True, mongo_query[0]
 
 def is_float(value: str) -> bool:
     """
@@ -314,9 +339,9 @@ def handle_mongo_query(collection_name, result):
 
     # Construct WHERE clause
     if where_condition:
-        condition_dict = parse_condition_nosql(where_condition, table_columns)
-        if not condition_dict:
-            return jsonify({"error": "Invalid condition or column name in the WHERE clause."}), 400
+        status, condition_dict = parse_condition_nosql(where_condition, table_columns)
+        if not status:
+            return jsonify({"error": condition_dict}), 400
         match_stage = {"$match": condition_dict}
     else:
         match_stage = {}
@@ -324,10 +349,10 @@ def handle_mongo_query(collection_name, result):
 
     # Construct HAVING clause
     if having_condition:
-        having_dict = parse_condition_nosql(having_condition, table_columns)
-        if not having_dict:
-            return jsonify({"error": "Invalid condition or column name in the HAVING clause."}), 400
-        having_stage = {"$match": having_dict}
+        status, having_query = parse_condition_nosql(having_condition, table_columns, aggregate_columns['A'], aggregate_columns['B'], True)
+        if not status:
+            return jsonify({"error": having_query}), 400
+        having_stage = {"$match": having_query}
     else:
         having_stage = {}
         if group_by_column:
@@ -414,20 +439,6 @@ def handle_mongo_query(collection_name, result):
     return jsonify({"queries": [query], "message": message}), 200
 
 def detect_natural_language_query(user_input):
-    AGGREGATE_FUNCTIONS = {
-        'total': 'SUM',
-        'highest': 'MAX',
-        'average': 'AVG',
-        'minimum': 'MIN',
-        'maximum': 'MAX',
-        'find': 'COUNT',
-        'lowest': 'MIN',
-        'count': 'COUNT',
-        'max': 'MAX',
-        'min': 'MIN',
-        'sum': 'SUM',
-        'avg': 'AVG'
-    }
     
     # Patterns for different clauses
     aggregate_patterns = [
