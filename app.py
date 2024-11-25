@@ -90,6 +90,41 @@ def get_table_names():
         
     return jsonify({"table_names": dets}), 200
 
+def query_recommendation(db_type, user_input):
+    if db_type == "mysql":
+        sample_queries_sql = {"where" : ["Sample query with where and group by", "Example query with where and order by"], 
+                        "group by" : ["Example with group by and having", "Sample query with order by and group by"],
+                        "order by" : ["Instance with group by, having and order by", "Example with where clause and order by"]
+                        }
+        
+        if "where" in user_input and "group by" not in user_input and "order by" not in user_input:
+            rec_queries = sample_queries_sql["where"]
+        elif "where" not in user_input and "group by" in user_input and "order by" not in user_input:
+            rec_queries = sample_queries_sql["group by"]
+        elif "where" not in user_input and "group by" not in user_input and "order by" in user_input:
+            rec_queries = sample_queries_sql["order by"]
+        else:
+            rec_queries = []
+    elif db_type == "nosql":
+        sample_queries_nosql = {"project" : ["Sample query with project and match", "Example query with project and sort"], 
+                        "group" : ["Example with group and aggregate", "Sample query with sort and group"],
+                        "sort" : ["Instance with group, aggregate and sort", "Example with match and sort"],
+                        "match" : ["Sample query with project and match", "Example query with group and aggregate match"]
+                        }
+        
+        if "project" in user_input and "group" not in user_input and "sort" not in user_input and "match" not in user_input:
+            rec_queries = sample_queries_nosql["project"]
+        elif "project" not in user_input and "group" in user_input and "sort" not in user_input and "match" not in user_input:
+            rec_queries = sample_queries_nosql["group"]
+        elif "project" not in user_input and "group" not in user_input and "sort" in user_input and "match" not in user_input:
+            rec_queries = sample_queries_nosql["sort"]
+        elif "project" not in user_input and "group" not in user_input and "sort" not in user_input and "match" in user_input:
+            rec_queries = sample_queries_nosql["match"]
+        else:
+            rec_queries = []
+
+    return rec_queries
+
 # API endpoint to generate example queries based on user input
 @app.route("/api/generate_query", methods=["POST"])
 def generate_query():
@@ -120,7 +155,9 @@ def generate_query():
                     table_name = random.choice(collection_names)  # Select a random collection
             
             queries = generate_example_queries(table_name, user_input, db_type)
-            return jsonify({"queries": queries}), 200
+            rec_queries = query_recommendation(db_type, user_input)
+
+            return jsonify({"queries": queries, "recommend": rec_queries}), 200
         
         elif any(word in user_input for word in describe_synonyms):
             return handle_describe_query(db_type, table_name, user_input)
