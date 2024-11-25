@@ -108,17 +108,10 @@ def get_columns_from_mysql(engine, table_name):
 
 def get_fields_from_mongodb(db, collection_name):
     collection = db[collection_name]
-    print("HTHEWJ",collection)
     document = collection.find()
     document = list(document)
-    print(list(document))
     if document:
-        print("HRHE")
-        # print(list(document.keys()))
-        # return list(document.keys())
-        # print(list(document))
         return json.loads(json_util.dumps(document))
-        # return document
     return []
 
 def get_random_aggregation_function():

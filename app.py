@@ -98,7 +98,6 @@ def generate_query():
         table_name = data.get("table_name")
         user_input = data.get("user_input").lower()
         db_type = data.get("db_type", "mysql").lower() #defaulting to mysql if no dbtype given by user
-        print(table_name, user_input, db_type)
 
         if not user_input:
             return jsonify({"error": "User input for query example is required"}), 400
