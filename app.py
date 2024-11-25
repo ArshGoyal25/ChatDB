@@ -168,25 +168,6 @@ def get_mongo_coffee_sales():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# Additional route for SQL querying with filter
-@app.route("/api/sql/coffee_sales/filter", methods=["GET"])
-def filter_sql_coffee_sales():
-    product = request.args.get("product")
-    print(product)
-    try:
-        engine = connect_mysql()
-        query = f'SELECT * FROM coffee_sales WHERE product_category = "{product}"'
-        
-        #print(query)
-        df = pd.read_sql(query, engine, params={"product": product})
-        # Convert Timedelta columns to string format
-        for col in df.select_dtypes(include=['timedelta']):
-            df[col] = df[col].apply(lambda x: str(x) if pd.notnull(x) else None)
-
-        data = df.to_dict(orient="records")
-        return jsonify(data), 200
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
 
 def parse_query(query):
     collection_match = re.search(r"db\.(\w+)", query)
@@ -234,7 +215,6 @@ def execute_query():
                     df[col] = df[col].apply(
                         lambda x: str(x).split(" ")[-1] if pd.notnull(x) else None
                     )
-
 
                 data = df.to_dict(orient="records")
                 return jsonify(data), 200
