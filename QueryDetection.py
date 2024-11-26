@@ -35,8 +35,8 @@ def parse_condition_sql(condition, valid_columns, agg_col = None, grp_col = None
         ">": ">",
         ">=": ">=",
         "=": "=",
-        "is greater than or equal to": ">=",
-        "is less than or equal to": "<=",
+        "is greater than equal to": ">=",
+        "is less than equal to": "<=",
         "is equal to": "=",
         "is less than": "<",
         "is greater than": ">",
@@ -231,35 +231,37 @@ def is_float(value):
 def parse_condition_nosql(condition, valid_columns, agg_col = None, grp_col = None, having_condition = False):
         
     operators = {
-        "=": "$eq",
+       ">=": "$gte",
+       "<=": "$lte",
         "==": "$eq",
         "!=": "$ne",
         "<>": "$ne",
         "<": "$lt",
-        "<=": "$lte",
         ">": "$gt",
-        ">=": "$gte",
+         "=": "$eq",
+        "is greater than equal to": "$gte",
         "is equal to": "$eq",
         "is not equal to": "$ne",
+        "is less than equal to": "$lte",
         "is less than": "$lt",
-        "is less than or equal to": "$lte",
-        "is greater than": "$gt",
-        "is greater than or equal to": "$gte",
+        "is greater than": "$gt"
+        
     }
 
     # Split conditions by logical operators (e.g., AND, OR) while keeping the operators
     conditions = re.split(r'\s+and\s+|\s+or\s+', condition, flags=re.IGNORECASE)
-
+    print(conditions)
     mongo_query = []
 
     for cond in conditions:
         condition_dict = {}
         for operator, mongo_op in operators.items():
+            # print(operator)
             if operator.lower() in cond.lower():
                 left, right = cond.split(operator, 1)
                 left = left.strip()
                 right = right.strip()
-
+                print(operator, left, right)
                 if(having_condition):
                     print("fdjnfjnfjd")
                     vals = left.split(" ")
@@ -305,8 +307,8 @@ def parse_condition_nosql(condition, valid_columns, agg_col = None, grp_col = No
 
                 mongo_query.append(condition_dict)
                 break
-        else:
-            return False, "Invalid Operators Used in condition statement"
+        # else:
+        #     return False, "Invalid Operators Used in condition statement"
 
     if len(mongo_query) > 1:
         if re.search(r'\bor\b', condition):
@@ -495,7 +497,7 @@ def detect_natural_language_query(user_input, table_name=None, db_type = None):
         random_col2 = random.choice(table_columns)
     while(random_col2 == random_col3):
         random_col3 = random.choice(table_columns)
-    conditions = ["is equal to", "is not equal to", "is less than", "is less than or equal to", "is greater than", "is greater than or equal to"]
+    conditions = ["is equal to", "is not equal to", "is less than", "is less than equal to", "is greater than", "is greater than equal to"]
     random_cond = random.choice(conditions)
     # Patterns for different clauses
     aggregate_patterns = [

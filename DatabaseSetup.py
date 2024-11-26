@@ -10,7 +10,7 @@ from bson import json_util
 
 # Database configuration - Replace with actual credentials
 MYSQL_USER = "root"
-MYSQL_PASSWORD = ""
+MYSQL_PASSWORD = "root@111"
 mysql_password_encoded = MYSQL_PASSWORD.replace('@', '%40')
 MYSQL_HOST = "localhost"
 MYSQL_PORT = 3306
@@ -69,21 +69,40 @@ def convert_time_columns(df):
             )
     return df
 
-def insert_data_to_mongo(db, df, collection_name=None):
+def insert_data_to_mongo(db, data, collection_name=None):
+    # try:
+    #     collection_name = collection_name or COLLECTION_NAME
+    #     # df = convert_time_columns(df)
+    #     # print(df.head())
+    #     # data = df.to_dict(orient='records')
+    #     # data = [{str(k): v for k, v in record.items()} for record in data]
+
+    #     collection = db[collection_name]
+    #     collection.insert_one(df)
+    #     print(f"Inserted {len(df)} records into {COLLECTION_NAME} collection.")
+    #     return {"message": f"Data inserted into MongoDB collection '{collection_name}' successfully"}
+    # except Exception as e:
+    #     print(f"Error inserting data into MongoDB: {e}")
+    #     return {"error": str(e)}
     try:
         collection_name = collection_name or COLLECTION_NAME
-        # df = convert_time_columns(df)
-        # print(df.head())
-        # data = df.to_dict(orient='records')
-        # data = [{str(k): v for k, v in record.items()} for record in data]
-
         collection = db[collection_name]
-        collection.insert_one(df)
-        print(f"Inserted {len(df)} records into {COLLECTION_NAME} collection.")
+
+        # Check if the input is a list of records or a single record
+        if isinstance(data, list):
+            collection.insert_many(data)  # Insert multiple records
+            print(f"Inserted {len(data)} records into the '{collection_name}' collection.")
+        elif isinstance(data, dict):
+            collection.insert_one(data)  # Insert a single record
+            print(f"Inserted 1 record into the '{collection_name}' collection.")
+        else:
+            raise ValueError("Data must be a dictionary or a list of dictionaries.")
+
         return {"message": f"Data inserted into MongoDB collection '{collection_name}' successfully"}
     except Exception as e:
         print(f"Error inserting data into MongoDB: {e}")
         return {"error": str(e)}
+
 
 
 def get_mysql_table_names(engine):
