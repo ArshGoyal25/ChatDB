@@ -60,8 +60,8 @@ def parse_condition_sql(condition, valid_columns, agg_col = None, grp_col = None
             operators_in_condition.append(item.lower())  # Store the operator (and/or)
         elif item:  # Non-empty items are conditions
             conditions.append(item)
-    print(conditions)
-    print(operators_in_condition)
+    # print(conditions)
+    # print(operators_in_condition)
     sql_query = ""
     for i, cond in enumerate(conditions):
         for operator in ops:
@@ -113,6 +113,7 @@ def handle_mysql_query(table_name, result):
     random_col1 = random.choice(list(table_columns.keys()))
     random_col2 = random.choice(list(table_columns.keys()))
     random_col3 = random.choice(list(table_columns.keys()))
+    numeric_cols = get_numeric_cols_sql(table_columns)
 
     errors = result["errors"]
     suggestions = result["suggestions"]
@@ -121,6 +122,9 @@ def handle_mysql_query(table_name, result):
     
     project_columns = result["project_columns"]
     for col in project_columns:
+        if col == '*' or col == "all":
+            project_columns = ['*']
+            continue
         if col not in table_columns:
             return jsonify({"error": f"Invalid columns. '{col}' not found in table '{table_name}'. It Looks like the columns you wish to project are not in the table. Please update them. To understand more about which columns are present in the table you choose, run the command 'describe table' or 'describe collection' depending on the database type"}), 400
 
@@ -208,18 +212,15 @@ def handle_mysql_query(table_name, result):
     if missing_clauses:
         message += "\n\nIt looks like you may have missed the following clauses. Here’s how you can use them:"
         if "WHERE clause" in missing_clauses:
-            suggestions.append("WHERE clause: You can filter results based on certain conditions, e.g., 'WHERE age > 30'")            
+            suggestions.append(f"You can filter results based on certain conditions, try - 'where {numeric_cols[0]} is less than {random.randint(1, 10)}' '")            
         if "HAVING clause" in missing_clauses:
-            suggestions.append("HAVING clause: Use this for filtering grouped results, e.g., 'HAVING COUNT(*) > 5'")
+            suggestions.append(f"You can filter grouped results, try - 'having COUNT({numeric_cols[0]}) is greater than {random.randint(1, 10)}'")
         if "ORDER BY clause" in missing_clauses:
-            suggestions.append("ORDER BY clause: You can sort the results, e.g., 'ORDER BY age DESC'")
+            suggestions.append(f"You can sort the results, try - 'order by {random_col1}'")
         if "LIMIT clause" in missing_clauses:
-            suggestions.append("LIMIT clause: You can limit the number of results returned, e.g., 'LIMIT 10'")
+            suggestions.append(f"You can limit the number of results returned, try - 'limit {random.randint(1, 10)}'")
 
     return jsonify({"queries": [query],"suggestions": suggestions, "message": message}), 200
-
-
-import re
 
 def is_float(value):
     try:
@@ -250,7 +251,7 @@ def parse_condition_nosql(condition, valid_columns, agg_col = None, grp_col = No
 
     # Split conditions by logical operators (e.g., AND, OR) while keeping the operators
     conditions = re.split(r'\s+and\s+|\s+or\s+', condition, flags=re.IGNORECASE)
-    print(conditions)
+    # print(conditions)
     mongo_query = []
 
     for cond in conditions:
@@ -261,9 +262,8 @@ def parse_condition_nosql(condition, valid_columns, agg_col = None, grp_col = No
                 left, right = cond.split(operator, 1)
                 left = left.strip()
                 right = right.strip()
-                print(operator, left, right)
+                # print(operator, left, right)
                 if(having_condition):
-                    print("fdjnfjnfjd")
                     vals = left.split(" ")
                     if(len(vals) == 2):
                         agg_func_obtained = None
@@ -282,13 +282,6 @@ def parse_condition_nosql(condition, valid_columns, agg_col = None, grp_col = No
                             return False, "The aggregate column can be used in having clause only with an aggregate function"
                         if(agg_col_obtained != grp_col):
                             return False, "Only the group by column can be used in having clause without an aggregate function"
-                # else:
-                #     if left not in valid_columns:
-                #         return False, "Invalid column {left} used in condition statement"
-                    
-                # Ensure the left side is a valid column
-                # if left not in valid_columns:
-                #     return None
 
                 # Handle right side values based on type (string, number, float)
                 if right.startswith('"') and right.endswith('"'):
@@ -307,8 +300,8 @@ def parse_condition_nosql(condition, valid_columns, agg_col = None, grp_col = No
 
                 mongo_query.append(condition_dict)
                 break
-        # else:
-        #     return False, "Invalid Operators Used in condition statement"
+        else:
+            return False, "Invalid Operators Used in condition statement"
 
     if len(mongo_query) > 1:
         if re.search(r'\bor\b', condition):
@@ -318,22 +311,6 @@ def parse_condition_nosql(condition, valid_columns, agg_col = None, grp_col = No
 
     return True, mongo_query[0]
 
-def is_float(value: str) -> bool:
-    """
-    Check if a string can be converted to a float.
-
-    Args:
-        value (str): The input string.
-
-    Returns:
-        bool: True if the string is a valid float, False otherwise.
-    """
-    try:
-        float(value)
-        return True
-    except ValueError:
-        return False
-
 def handle_mongo_query(collection_name, result):
     engine = connect_mongo()
     table_columns = get_sample_document_mongodb(engine, collection_name)
@@ -341,10 +318,11 @@ def handle_mongo_query(collection_name, result):
     fields = get_field_types_from_mongodb(engine, collection_name)
     numeric_cols = get_numeric_fields_nosql(fields)
 
-
     random_col1 = random.choice(table_columns)
     random_col2 = random.choice(table_columns)
     random_col3 = random.choice(table_columns)
+    numeric_cols1 = random.choice(numeric_cols)
+    numeric_cols2 = random.choice(numeric_cols)
 
     errors = result["errors"]
     suggestions = result["suggestions"]
@@ -438,7 +416,7 @@ def handle_mongo_query(collection_name, result):
         query = f"db.{collection_name}.aggregate({pipeline})"
 
     else:  # Build Simple SELECT query
-        if not project_columns:
+        if not project_columns or project_columns == ["*"] or project_columns == ["all"]:
             project_columns = {"_id": 0}  # Exclude `_id` by default for MongoDB projections
         else:
             project_columns = {col: 1 for col in project_columns}
@@ -451,20 +429,19 @@ def handle_mongo_query(collection_name, result):
 
     # Build helpful message for missing clauses
     message = "Here is your query pipeline:"
+    suggestions = []
     if missing_clauses:
-        message += "\n\nIt looks like you may have missed the following stages. Here’s how you can use them:\n"
+        message += "\n\nIt looks like you may have missed the following clauses. Here’s how you can use them:"
         if "WHERE clause" in missing_clauses:
-            message += "1. WHERE stage: Use `$match` to filter documents, e.g., `{'age': {'$gt': 30}}`.\n"
+            suggestions.append(f"You can match results based on certain conditions, try - 'where {numeric_cols[0]} is less than {random.randint(1, 10)}' '")            
         if "HAVING clause" in missing_clauses:
-            message += "2. HAVING stage: Use `$match` after `$group` to filter grouped results, e.g., `{'count': {'$gt': 5}}`.\n"
+            suggestions.append(f"You can match grouped results, try - 'having COUNT({numeric_cols[0]}) is greater than {random.randint(1, 10)}'")
         if "ORDER BY clause" in missing_clauses:
-            message += "3. ORDER BY stage: Use `$sort` to sort results, e.g., `{'age': 1}` for ascending.\n"
+            suggestions.append(f"You can sort the results, try - 'order by {random_col1}'")
         if "LIMIT clause" in missing_clauses:
-            message += "4. LIMIT stage: Use `$limit` to restrict the number of results, e.g., `10`.\n"
+            suggestions.append(f"You can limit the number of results returned, try - 'limit {random.randint(1, 10)}'")
     print("Pipeline:", query)
-    # db.coffee_shop.find({'store_location': {'$ne': 'Lower Manhattan'}}, {'unit_price': 1, 'transaction_date': 1}).limit(5)
-    # db.coffee_shop.find({'$match': {'product_type': {'$eq': 'premium beans'}}}, {'_id': 0}).limit(5)
-    return jsonify({"queries": [query], "message": message}), 200
+    return jsonify({"queries": [query],"suggestions": suggestions,"message": message}), 200
 
 def detect_natural_language_query(user_input, table_name=None, db_type = None):
     
@@ -499,6 +476,14 @@ def detect_natural_language_query(user_input, table_name=None, db_type = None):
         random_col3 = random.choice(table_columns)
     conditions = ["is equal to", "is not equal to", "is less than", "is less than equal to", "is greater than", "is greater than equal to"]
     random_cond = random.choice(conditions)
+
+    user_input = user_input.strip()
+    select_present = False
+    if user_input.lower().startswith("select"):
+        user_input = user_input[6:].strip()
+        select_present = True
+        print("jdfnjdnf")
+
     # Patterns for different clauses
     aggregate_patterns = [
         r"(total|sum) (?P<A>\w+)",
@@ -551,6 +536,12 @@ def detect_natural_language_query(user_input, table_name=None, db_type = None):
             if not match_found:
                 if 'where' not in col:
                     result["project_columns"].append(col.strip())
+    if not column_match and select_present:
+        print("select present")
+        for col in user_input.split(','):
+            result["project_columns"].append(col.strip())
+        if result["project_columns"] == ['']:
+            result["project_columns"] = ["*"]
 
     
     for pattern in aggregate_group_by_patterns:
@@ -610,15 +601,15 @@ def detect_natural_language_query(user_input, table_name=None, db_type = None):
     if having_match:
         result["having_condition"] = having_match.group("condition").strip()
 
-    if result["having_condition"] and not result["group_by"]:
+    if ("having" in user_input.lower() or result["having_condition"]) and not result["group_by"]:
         result["errors"].append("The keyword 'having' is used in the input provided. Please note that the HAVING clause cannot be used without GROUP BY. Please include a GROUP BY clause before the HAVING clause in your query.")
-        result["suggestions"].append(f"{random_key1} {random_numeric_col1} group by {random_col1} {user_input}")
-        result["suggestions"].append(f"{random_key2} {random_numeric_col2} group by {random_col2} {user_input}")
+        result["suggestions"].append(f"{random_key1} {random_numeric_col1} group by {random_col1} {user_input} ... ")
+        result["suggestions"].append(f"{random_key2} {random_numeric_col2} group by {random_col2} {user_input} ... ")
         return result
 
     if "having" in user_input.lower() and not result["having_condition"]:
         result["errors"].append("The keyword 'having' is used in the input provided. Please note that the HAVING clause cannot be used without a condition. Please include a condition in your query.")
-        result["suggestions"].append(f"having {random_cond} {random.randint(1, 50)}")
+        result["suggestions"].append(f"having {random_key1}({random_col2}) {random_cond} {random.randint(1, 50)}")
         return result
 
     # Extract ORDER BY clause (if any) with ascending or descending

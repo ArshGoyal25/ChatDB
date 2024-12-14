@@ -7,20 +7,7 @@ import datetime
 import random
 import ast
 from bson import json_util
-
-# Database configuration - Replace with actual credentials
-MYSQL_USER = "root"
-MYSQL_PASSWORD = "root@111"
-mysql_password_encoded = MYSQL_PASSWORD.replace('@', '%40')
-MYSQL_HOST = "localhost"
-MYSQL_PORT = 3306
-MYSQL_DATABASE = "coffee_shop"
-MONGO_URI = "mongodb://127.0.0.1:27017/?directConnection=true&serverSelectionTimeoutMS=2000&appName=mongosh+2.3.2"
-MONGO_DATABASE = "coffee_shop"
-COLLECTION_NAME='sales'
-
-# pd.set_option('display.max_colwidth', None)  # Show full content of columns
-# pd.set_option('display.max_rows', None)      # Show all rows for debugging
+from Config import *
 
 # Connect to MySQL
 def connect_mysql():
@@ -44,7 +31,6 @@ def connect_mongo():
         return None
 
 def insert_data_to_mysql(engine, df, table_name=None):
-
     try:
         table_name = table_name or "temp"
         df.to_sql(name=table_name, con=engine, if_exists='replace', index=False)
@@ -56,7 +42,6 @@ def insert_data_to_mysql(engine, df, table_name=None):
         return {"error": str(e)}
 
 
-#function coz mongodb does not support given date format
 def convert_time_columns(df):
     # Convert any datetime or time objects in the DataFrame to datetime.datetime
     for col in df.columns:
@@ -70,20 +55,6 @@ def convert_time_columns(df):
     return df
 
 def insert_data_to_mongo(db, data, collection_name=None):
-    # try:
-    #     collection_name = collection_name or COLLECTION_NAME
-    #     # df = convert_time_columns(df)
-    #     # print(df.head())
-    #     # data = df.to_dict(orient='records')
-    #     # data = [{str(k): v for k, v in record.items()} for record in data]
-
-    #     collection = db[collection_name]
-    #     collection.insert_one(df)
-    #     print(f"Inserted {len(df)} records into {COLLECTION_NAME} collection.")
-    #     return {"message": f"Data inserted into MongoDB collection '{collection_name}' successfully"}
-    # except Exception as e:
-    #     print(f"Error inserting data into MongoDB: {e}")
-    #     return {"error": str(e)}
     try:
         collection_name = collection_name or COLLECTION_NAME
         collection = db[collection_name]
@@ -104,7 +75,6 @@ def insert_data_to_mongo(db, data, collection_name=None):
         return {"error": str(e)}
 
 
-
 def get_mysql_table_names(engine):
     query = "SHOW TABLES"
     df = pd.read_sql(query, engine)
@@ -122,11 +92,6 @@ def get_columns_from_mysql(engine, table_name):
             print(row)
             columns[row[0]] = row[1]
     return columns
-    # query = f"SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='{table_name}'"
-    # df = pd.read_sql(query, engine)
-    # print(df.dtypes)
-    # print(df.info())
-    # return df['COLUMN_NAME'].tolist()
 
 def get_fields_from_mongodb(db, collection_name):
     collection = db[collection_name]

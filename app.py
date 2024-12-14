@@ -29,7 +29,6 @@ def insert_data():
         return jsonify({"error": "CSV file and database type are required"}), 400
     
     try:
-        # print("HEREE")
         file = request.files['file']
         db_type = request.form['target_db']
         table_name=request.form.get('table_name')
@@ -46,27 +45,19 @@ def insert_data():
 
         to_sql = db_type.lower() == "sql"
         to_nosql = db_type.lower() == "nosql"
-        print(to_sql, to_nosql)
         if to_sql:
             try:
                 excel_data = pd.ExcelFile(file)
-                # print(excel_data)
                 df = pd.read_excel(excel_data)
-                print(df.head())
                 result = import_data(df, to_sql=to_sql, to_nosql=to_nosql, table_name=table_name)
                 return jsonify(result), 200
             except Exception as e:
                 return jsonify({"error": f"Error reading Excel file: {str(e)}"}), 400
         
         else:
-            # with open(file) as file:
             df = json.load(file)
             result = import_data(df, to_sql=to_sql, to_nosql=to_nosql, table_name=table_name)
             return jsonify(result), 200
-    
-        
-        return jsonify(result), 200
-        return jsonify("success"), 200
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
