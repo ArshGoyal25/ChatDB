@@ -74,6 +74,7 @@ EXIT; -- Exit MySQL console
 mongod --dbpath=<path_to_your_data_directory>  
 mongosh  
 use coffee_shop;  -- Switch to the database - it will be created if it doesn't exist  
+exit;
 ```
 
 ### 4.Configure Database Connections
