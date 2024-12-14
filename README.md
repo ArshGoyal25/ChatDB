@@ -27,7 +27,7 @@ ChatDB is an interactive application designed to help users learn how to query d
 
 
 2. **Frontend** (React):  
-   - `src/` - Contains the React components, routes, and services for the user interface.  
+   - `database-ui/` - Contains the React components, routes, and services for the user interface.  
 
 
 3. **Other Files**:  
@@ -81,15 +81,19 @@ use coffee_shop;  -- Switch to the database - it will be created if it doesn't e
 Update the connection details in Config.py as per your setup.
 
 #### MySQL Configuration
+```bash
 MYSQL_USER = "root"  
 MYSQL_PASSWORD = "your_password"  
 MYSQL_HOST = "localhost"  
 MYSQL_PORT = 3306  
 MYSQL_DB = "coffee_shop"  
+```
 
 #### MongoDB Configuration  
+```bash
 MONGO_URI = "mongodb://localhost:27017/"  
 MONGO_DB = "coffee_shop"
+```
 
 - Replace the MySQL connection string with your local MySQL configuration.
 - Replace the MongoDB connection string with your MongoDB URI.
@@ -99,7 +103,7 @@ MONGO_DB = "coffee_shop"
 
 #### Navigate to the Frontend Directory
 ```bash
-cd frontend 
+cd data 
 ```
 
 #### Install Node.js Packages
@@ -108,15 +112,16 @@ npm install
 ```
 
 ### 6. Running the Application
+Two terminals are required to run the application
 
-#### Start the backend server
+#### In the first terminal, start the backend server
 ```bash
 python3 app.py 
 ```
 
-#### In a New Terminal, start the frotend react app
+#### In the second terminal, start the frotend React Application
 ```bash
-cd frontend  
+cd database-ui
 npm start 
 ```
 

@@ -1,0 +1,126 @@
+/* UserGuide.css */
+body{
+  text-align: left;
+}
+/* General Layout */
+.user-guide {
+  max-width: 1100px;
+  margin: 30px auto;
+  padding: 30px;
+  background-color: #f9f9f9;
+  border: 1px solid #e0e0e0;
+  border-radius: 10px;
+  font-family: 'Roboto', Arial, sans-serif;
+  color: #333;
+  line-height: 1.8;
+}
+
+/* Header */
+.guide-header {
+  margin-bottom: 40px;
+  text-align: center;
+}
+
+.guide-header h1 {
+  font-size: 2.4rem;
+  color: #2c3e50;
+  text-align: center;
+  margin-bottom: 10px;
+}
+
+.guide-header p {
+  font-size: 1.1rem;
+
+  color: #666;
+  max-width: 800px;
+}
+
+/* Section Styles */
+.guide-section {
+  margin-bottom: 40px;
+  padding-bottom: 30px;
+  border-bottom: 1px solid #ddd;
+}
+
+.guide-section h2 {
+  font-size: 2rem;
+  color: #34495e;
+  margin-bottom: 15px;
+}
+
+.guide-section h3 {
+  font-size: 1.4rem;
+  color: #2c3e50;
+  margin-top: 20px;
+  margin-bottom: 10px;
+}
+
+.guide-section p {
+  margin-bottom: 15px;
+  font-size: 1rem;
+  color: #555;
+}
+
+/* Lists */
+.steps-list {
+  list-style-type: decimal;
+  padding-left: 20px;
+  text-align: left;
+  margin-bottom: 20px;
+}
+
+.bullet-list {
+  list-style-type: disc;
+  padding-left: 20px;
+}
+
+.bullet-list li,
+.steps-list li {
+  margin-bottom: 10px;
+  font-size: 1rem;
+  color: #444;
+}
+
+/* Info Box */
+.info-box {
+  background-color: #eef9ff;
+  border-left: 4px solid #3498db;
+  padding: 15px;
+  border-radius: 5px;
+  font-size: 1rem;
+  color: #2c3e50;
+  margin-top: 20px;
+}
+
+/* Links */
+.guide-section a {
+  color: #3498db;
+  text-decoration: underline;
+}
+
+.guide-section a:hover {
+  text-decoration: none;
+}
+
+/* Responsive Design */
+@media screen and (max-width: 768px) {
+  .user-guide {
+    padding: 20px;
+  }
+
+  .guide-header h1 {
+    font-size: 2rem;
+  }
+
+  .guide-header p {
+    font-size: 0.95rem;
+  }
+
+  .guide-section h2 {
+    font-size: 1.8rem;
+  }
+
+  .guide-section h3 {
+    font-size: 1.2rem;
+  }
+}
