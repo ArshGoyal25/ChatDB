@@ -103,7 +103,7 @@ MONGO_DB = "coffee_shop"
 
 #### Navigate to the Frontend Directory
 ```bash
-cd data 
+cd database-ui
 ```
 
 #### Install Node.js Packages
