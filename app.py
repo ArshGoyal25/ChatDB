@@ -5,9 +5,10 @@ from flask import Flask, jsonify, request
 from flask_cors import CORS
 import pandas as pd
 import random
-from DatabaseSetup import connect_mysql, connect_mongo, import_data, get_mongo_collection_names, get_mysql_table_names, generate_example_queries
+from DatabaseSetup import connect_mysql, connect_mongo, import_data, get_mongo_collection_names, get_mysql_table_names
 from QueryDetection import handle_natural_language_query
 from DescribeQuery import handle_describe_query
+from ExampleQuery import generate_example_queries
 import re
 import ast
 from bson import ObjectId

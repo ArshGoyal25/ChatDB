@@ -1,24 +1,126 @@
-# ChatDB
-# setup virtual env:
+# Welcome to ChatDB
+
+ChatDB is an interactive application designed to help users learn how to query database systems like SQL and NoSQL effectively. The tool simplifies database exploration by:  
+- Suggesting and executing SQL and NoSQL queries.  
+- Providing a natural language interface to interact with databases.  
+- Supporting MySQL, and MongoDB integration.  
+- Allowing seamless management and visualization of data via a React-based frontend.  
+
+---
+
+## Features  
+- **SQL/NoSQL Query Learning**: Generate and execute /NoSQLSQL queries with guidance.  
+- **Generate Sample Queries**: View Suggestions on queries to execute in database
+- **Natural Language Interface**: Use plain English to interact with databases.
+- **React Frontend**: Intuitive user interface for smooth interaction.  
+
+---
+## Project Structure 
+
+1. **Backend**:    
+   - `DatabaseSetup.py` - Sets up, interacts and executes queries in the MySQL and MongoDB databases.  
+   - `DescribeQuery.py` - Contains logic to describe the contents of the tables.  
+   - `ExampleQuery.py` - Contains logic to generate example queries.  
+   - `QueryDetection.py` - Detects and analyzes database query patterns, and generates queries based on natural language input.  
+   - `Config.py` - Centralized configuration for database connection strings.  
+   - `app.py` - Flask Server with RestAPI endpoints for processing user requests.  
+
+
+2. **Frontend** (React):  
+   - `src/` - Contains the React components, routes, and services for the user interface.  
+
+
+3. **Other Files**:  
+   - `Data_Files` - Contains xlsx and json data used to populate the MySQL database.  
+   - `requirements.txt` - Python dependencies for the backend.  
+   - `package.json` - Node.js dependencies for the React frontend.  
+   - `README.md` - Project documentation.  
+
+
+---
+
+## Setup Guide  
+
+### Prerequisites 
+- Python 3.x  
+- Node.js and npm  
+- MySQL and MongoDB installed locally  
+
+### 1. Backend Setup  
+
+#### Create and Activate a Virtual Environment  
+```bash
 python3 -m venv project
+source ./project/bin/activate
+pip3 install -r requirements.txt
+```
 
-# Activate virtual env:
-source ./project/bin/activate 
+#### Install the requirements
+```bash
+pip3 install -r requirements.txt
+```
 
-# install required packages:
-# pymongo for MongoDB
-# sqlalchemy and mysqlconnector or mysql connection via sqlalchemy
-# pandas
-pip3 install pymongo sqlalchemy mysql-connector-python pandas
+### 2. Set Up MySQL Database
+```bash
+mysql -u root -p  
+CREATE DATABASE coffee_shop;  
+SHOW DATABASES; -- Verify that `coffee_shop` is listed  
+EXIT; -- Exit MySQL console 
+```
 
-# create db in mysql:
-mysql -u root -p
-CREATE DATABASE coffee_shop;
-SHOW DATABASES; -- should have coffee_shop listed
-EXIt -- to exit mysql
+### 3. Set Up MongoDB Collection
 
-# DatabaseSetup.py
-Replace sql and mongodb connection string with local system string
-Ensure coffee_shop.xlsx is in the same directory
+```bash
+mongod --dbpath=<path_to_your_data_directory>  
+mongosh  
+use coffee_shop;  -- Switch to the database - it will be created if it doesn't exist  
+```
 
-run: python3 DatabaseSetup.py
+### 4.Configure Database Connections
+
+Update the connection details in Config.py as per your setup.
+
+#### MySQL Configuration
+MYSQL_USER = "root"  
+MYSQL_PASSWORD = "your_password"  
+MYSQL_HOST = "localhost"  
+MYSQL_PORT = 3306  
+MYSQL_DB = "coffee_shop"  
+
+#### MongoDB Configuration  
+MONGO_URI = "mongodb://localhost:27017/"  
+MONGO_DB = "coffee_shop"
+
+- Replace the MySQL connection string with your local MySQL configuration.
+- Replace the MongoDB connection string with your MongoDB URI.
+
+
+### 5. Frontend Setup 
+
+#### Navigate to the Frontend Directory
+```bash
+cd frontend 
+```
+
+#### Install Node.js Packages
+```bash
+npm install
+```
+
+### 6. Running the Application
+
+#### Start the backend server
+```bash
+python3 app.py 
+```
+
+#### In a New Terminal, start the frotend react app
+```bash
+cd frontend  
+npm start 
+```
+
+#### Open a browser and navigate to:
+```bash
+http://localhost:3000  
+```

@@ -2,7 +2,9 @@ import random
 import re
 from flask import Flask, jsonify, request
 import pandas as pd
-from DatabaseSetup import connect_mysql, connect_mongo, get_columns_from_mysql, get_fields_from_mongodb, get_numeric_cols_sql, get_numeric_fields_nosql, get_sample_document_mongodb, get_field_types_from_mongodb
+from DatabaseSetup import connect_mysql, connect_mongo
+from DatabaseSetup import get_columns_from_mysql, get_fields_from_mongodb, get_sample_document_mongodb, get_field_types_from_mongodb
+from ExampleQuery import get_numeric_cols_sql, get_numeric_fields_nosql
 
 AGGREGATE_FUNCTIONS = {
     'total': 'SUM',
